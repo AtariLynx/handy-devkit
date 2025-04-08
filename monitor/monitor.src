@@ -11,6 +11,8 @@
 
 	.LIST ON
 
+BRK_USER        .EQ 1
+
 * ===========================================================================
 
         .ORG MONITOR_ZP_RESERVED
@@ -31,9 +33,9 @@ dest_old    .DS 2       ; FA-FB
         STA CPU_NMI
         LDA #>NmiHandler
         STA CPU_NMI+1
-        LDA #<IrqHandler            ; Set IRQ vector to $FBBC
+        LDA #<UserIntHandler            ; Set IRQ vector to $FBBC
         STA CPU_IRQ
-        LDA #>IrqHandler
+        LDA #>UserIntHandler
         STA CPU_IRQ+1
         LDA #RESTLESS+CART_POWER_OFF
         STA IODAT
@@ -85,8 +87,8 @@ Main
 
 ; Set all interrupt handlers to $F9B9 (RTS)
         LDX #8*2-2
-        LDY #>IntReturn
-.10     LDA #<IntReturn
+        LDY #>IrqStub
+.10     LDA #<IrqStub
         STA interrupt_buffer,x		; Store in IRQ jump table
         TYA
         STA interrupt_buffer+1,x
@@ -120,7 +122,7 @@ Main
 
 .6      JMP Main		; Next control command
 
-IntReturn
+IrqStub
         RTS
 
 ; Control loop for downloading bin from Pinky to Mandy
@@ -381,22 +383,22 @@ SetPage
         PHX
         PHY
         TAX
-        LDY #$02
+        LDY #POWERON
         STY SYSCTL1
         INY
         LDA IODAT
-        ORA #$08
+        ORA #RESTLESS
         STA IODAT
         LDA IODAT_RAM
-        ORA #$02
-        ORA #$08
+        ORA #CART_ADDR_DATA
+        ORA #RESTLESS
         STA IODIR
         LDA IODAT
-        ORA #$02
-        ORA #$08
+        ORA #CART_ADDR_DATA
+        ORA #RESTLESS
         STA Unknown3
-        AND #$FD
-        ORA #$08
+        AND #~CART_ADDR_DATA
+        ORA #RESTLESS
         STA Unknown3+1
         TXA
         SEC
@@ -413,7 +415,7 @@ SetPage
         INY
         ASL A
         BNE .52
-        LDA #$08
+        LDA #RESTLESS
         STA IODAT
         PLY
         PLX
@@ -438,36 +440,50 @@ Unknown     .DS 1      ; FBBA
 IODAT_RAM   .DS 1      ; FBBB
 
 IrqHandler             ; FBBC
-; IRQ/BRK interrupt handler
-        PHA			    ; Save A and X to stack
-        PHX
-        TSX
-        INX			    ; Load last entry of stack pointer before IRQ
-        INX
-        INX
-        LDA $0100,x     ; Read Process register from stack
-        AND #$10        ; Check if IRQ or BRK was reason for interrupt
-        BEQ $FBCE       ; IRQ will branch and fire interrupt table
-        PLX
-        PLA
-        JMP $F931		; Same as NMI vector
-.60
-        LDA INTSET
-        STA INTRST
-        LDX #$00		; Prepare IRQ jump table offset
-.62     BIT #$01		; Check if interrupt was triggered
-        BEQ .61
-        JSR Dispatch
-.61     LSR A			; Move to next interrupt
-        INX			    ; Advance IRQ jump table offset
-        INX
-        CPX #$0E		; Verify if passing last entry in table
-        BCC .62         ; Next iteration
-        PLX
-        PLA
-        RTI			    ; All done
+* This code is called whenever a non-NMI interrupt occurs (either a hardware
+* interrupt or execution of a software BRK).
 
-Dispatch
+UserIntHandler
+		PHA
+		PHX
+
+	  ;-- Check if we got here because of a BRK instruction and JMP to
+	  ;-- the BRK routine if so, else branch to the interrupt dispatcher
+		TSX
+		INX
+		INX
+		INX
+		LDA $0100,X		; Get a copy of the status byte
+		AND #$10		; Check break bit
+		BEQ hardInt		; and branch if clear (hardware int)
+
+        PLX
+        PLA
+        JMP NmiHandler  ; Same as NMI vector
+
+hardInt
+		;------	We had a hardware interrupt.
+		;------	Get the interrupt flags value, reset the bits
+        LDA INTSET
+        STA INTRST      ; Clear all interrupts
+        LDX #$00        ; Prepare IRQ jump table offset
+.00     BIT #$01        ; Check if interrupt was triggered
+        BEQ .01
+        JSR jumpIntTable
+.01     LSR A           ; Move to next interrupt
+        INX             ; Advance IRQ jump table offset
+        INX
+        CPX #$0E        ; Verify if passing last entry in table
+        BCC .00         ; Next iteration
+
+IntReturn
+		;------	At end of interrupt processing, restore the
+		;------	registers and return from interrupt
+        PLX
+        PLA
+        RTI
+
+jumpIntTable
         JMP (interrupt_buffer,X) 		; Jump to handler for this interrupt
 
         .ORG $FBEF
