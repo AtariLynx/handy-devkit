@@ -1,0 +1,383 @@
+* ===========================================================================
+
+	.LIST OFF
+
+		.IN 6502:include/harddefs.i
+        .IN 6502:macros/sys.mac
+
+	.LIST ON
+
+* ===========================================================================
+
+BASE_ORG	.EQ $0200
+VIDEO_ORG   .EQ $0400
+
+* ===========================================================================
+* ===                       =================================================
+* ===  Zero-Page Variables  =================================================
+* ===                       =================================================
+* ===========================================================================
+
+		.OR $0000
+
+cartblock       .DS 1 ; 00
+unknown1        .DS 1 ; 01
+dispptr         .DS 2 ; 02 03
+unknown3        .DS 2 ; 04 05 <-----|
+unknown4        .DS 1 ; 06          |
+ptr             .DS 2 ; 07 08       |
+CartOffsetLow   .DS 1 ; 09          |
+CartOffsetHi    .DS 1 ; 0A          |
+CartPage        .DS 1 ; 0B          |
+unknown6        .DS 2 ; 0C 0D <-|   |
+unknown7        .DS 4           |   |
+runptr          .DS 2 ; 12 13 --+---|
+unknown8        .DS 2 ; 14 15 --|
+
+* ===========================================================================
+* ===========================================================================
+
+		.OR BASE_ORG
+		.RU *
+
+        SEI
+
+; Initialize Mikey
+        LDX #MIKEYVALS_COUNT
+.0      LDA MikeyValues,x		; Initialization values
+        LDY MikeyOffsets,x		; Offsets from base value $FD00
+        STA MIKEY_BASE,y
+        DEX
+        BPL .0
+
+; 020F
+        STZ unknown4
+        SEC
+.1      ROL unknown4    ; Loop 1 bit from left to right 
+        JSR $0281       ; Start
+        BCC .1          ; Carry clear means ...
+        LDA #$9A        ; Offset beyond 410 byte encrypted header
+        STA ptr
+        LDA #$01
+        STA ptr+1
+        JSR $02B8
+
+        BCS .4
+        STZ ptr
+        LDA #$02
+        STA ptr+1
+.4      LDA #$00
+        JSR $032E       ; 
+        LDA $12
+        STA dispptr
+        CLC
+        ADC #$20        ; Skip color palette
+        STA SCBNEXTL
+        LDA $13
+        STA $03
+        ADC #$00
+        STA SCBNEXTH
+        LDY #$1F
+.3      LDA (dispptr),y
+        STA GREEN0,y	; Green color map
+        DEY
+        BPL .3
+
+InitSuzy ;
+        LDX #SUZYVALS_COUNT
+.10     LDA SuzyValues,x
+        LDY SuzyOffsets,x
+        STA SUZY_BASE,y
+        DEX
+        BPL .10
+        STZ CPUSLEEP
+        LDX #$20
+.13     LDA JOYSTICK
+        BNE .11
+.12     INC A
+        BNE .12
+        INY
+        BNE .13
+        DEX
+        BNE .13
+.11     LDX #$1F            ; Clear color map to black
+.14     STZ GREEN0,x
+        DEX
+        BPL .14
+        LDA #$01
+        JSR $032E
+        BRK             ; Trigger both a software and harddware break
+        NOP
+        JMP ($0012)
+
+; 0281
+        LDA #$01		; First block
+        JSR $0289
+        BCC .22
+        TXA
+; 0289
+        JSR SetCartBlock ; Select block number
+        LDA #$00
+        JSR $0294		; First run
+        CLC				; Now carry flag becomes important
+        LDA #$0A		; Restore original branch offset
+
+; 0294
+        STA branch+1	; Self-modify code to make branch a NOP on first run
+        LDX unknown4
+        LDA #$00        ; Pointer to $2400
+        STA dispptr
+        LDA #$24
+        STA dispptr+1
+        LDY #$00
+.20     LDA RCART_0
+        CMP (dispptr),y
+        STA (dispptr),y
+
+branch  .= *
+        BNE .21          ; On first pass this is essentially a NOP
+        INY
+        BNE .20
+        INC dispptr+1
+        DEX
+        BNE .20
+        SEC				; Carry set conveys result of a (non-?)match
+.22     RTS
+
+.21     CLC				; Carry clear means ... (?)
+        RTS
+
+; Performs routine 02D4 potentially twice
+; Numbers that might matter $DC00 and $FC01
+; 02B8
+        LDA #$00
+        LDX #$DC
+        JSR $02C5
+        BCC .25
+        LDA #$01
+        LDX #$FC
+
+; 02C5
+        PHX
+        JSR $02D4
+        PLA
+        CLC
+        ADC $13
+        BCC .25
+        LDA $06
+        CMP $10
+.25     RTS
+
+; Magic routine
+; 02D4
+        LDX $06
+        DEX
+        STX $01
+        STZ $00
+        ASL A
+        ROL $00
+        ASL A
+        ROL $00
+        ASL A
+        ROL $00
+        ADC $07        
+        TAX
+        LDA $00
+        ADC $08
+        PHA
+        AND $01
+        TAY
+        PLA
+        LSR $01
+        BCC .30
+        LSR A
+        BRA $02F0
+.30     JSR $0313
+        LDA #$09
+        STA $0C
+        LDA #$01
+        STA $0D
+        LDA #$0E
+        STA $04
+        LDA #$00
+        STA $05
+        JSR $0343
+        LDA $0E
+        LDX $0F
+        LDY $10
+
+; Set cart offset into block
+; 0313
+        STA $0B     ; Cart block
+        STX $09     ; Offset
+        STY $0A
+        JSR SetCartBlock
+        LDY $0A
+        LDX $09
+        INY
+        INX
+        BRA .31
+.32      LDA RCART_0
+.31      DEX
+        BNE .32
+        DEY
+        BNE .32
+        RTS
+
+; 032E
+        JSR $02D4
+        LDA $15
+        INC A
+        STA $0D
+        LDA $14
+        INC A
+        STA $0C
+        LDX $12
+        LDY $13
+        STX $04
+        STY $05
+
+; 0343
+FunctionX
+        LDA #RESTLESS
+        STA IODAT
+        LDX $09
+        SEC
+        LDA $0A
+        SBC $06
+        TAY
+.42     DEC $0C
+        BEQ .40
+.41     LDA RCART_0
+        STA ($04)
+        INC $04
+        BEQ .44
+.43     INX
+        BNE $0350
+        INY
+        BNE $0350
+        INC $0B
+        LDA $0B
+        JSR SetCartBlock		; Select block number
+        LDX #$00
+        SEC
+        TXA
+        SBC $06
+        TAY
+        BRA .42
+.44     INC $05
+        BRA .43
+.40     DEC $0D
+        BNE .41
+        STX $09
+        CLC
+        TYA
+        ADC $06
+        STA $0A
+        LDA #RESTLESS+CART_ADDR_DATA
+        STA IODAT
+        RTS
+
+; 0389
+SetCartBlock
+        STA cartblock	; Accumulator has block number
+        LDY #RESTLESS+CART_ADDR_DATA
+        LDA #RESTLESS
+        SEC
+        BRA .50
+.52     BCC .51
+        STY IODAT
+        CLC
+.51     INX             ; POWERON+CART_ADDR_STROBE
+        STX SYSCTL1
+.50     LDX #POWERON    ; Without CART_ADDR_STROBE
+        STX SYSCTL1
+        ROL cartblock
+        STA IODAT
+        BNE .52
+        RTS
+
+; 03A9
+; Suzy initialization values
+SuzyValues
+        .BYTE SPRITE_GO   
+        .BYTE >VIDEO_ORG   ; VIDBAS at $0400
+        .BYTE <VIDEO_ORG   
+        .BYTE $01   ; Enable bus for Suzy
+        .BYTE NO_COLLIDE+LEFTHAND
+        .BYTE $00   ; No horizontal and vertical offset
+        .BYTE $00
+;       .BYTE $91
+;       .BYTE $09
+
+; 03B0
+SuzyOffsets
+        .BYTE $91   ; SPRGO
+        .BYTE $09   ; VIDBASH
+        .BYTE $08   ; VIDBASL
+        .BYTE $90   ; SUZYBUSEN
+        .BYTE $92   ; SPRSYS
+        .BYTE $04   ; HOFFL
+        .BYTE $06   ; VOFFL
+        .BYTE $28   ; HSIZOFFL
+        .BYTE $2A   ; VSIZOFFL
+
+SUZYVALS_COUNT	.EQ *-SuzyOffsets
+
+; 03B9
+
+; Initialization values for Mikey addresses
+MikeyValues
+		.BYTE $00   ; Suzy done acknowledge
+		.BYTE DMA_ENABLE+DISP_FOURBIT+DISP_COLOR ; 4 bit color with video DMA enabled
+        .BYTE $04   ; DISPADDR to $0400
+        .BYTE $00   ; 
+        .BYTE $FF   ; Rest all interrupt bits
+        .BYTE AUD_1 ; Nothing enabled for non-display counters
+        .BYTE AUD_1
+        .BYTE AUD_1
+        .BYTE AUD_1
+        .BYTE AUD_1
+        .BYTE AUD_1
+        .BYTE $29	; Magic P value for screen frequency
+        .BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_LINKING
+        .BYTE $68	; 104 backup value for vertical scan timer (== 102 vertical lines plus 2)
+        .BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_1 ; 2 microseconds timing for horizontal line
+        .BYTE $9E	; 158 backup value (plus zero and underflow) (160 pixel across)
+        .BYTE AUD_1 ; Nothing enabled for all audio counters
+        .BYTE AUD_1 ;
+        .BYTE AUD_1 ;
+        .BYTE AUD_1 ;
+        .BYTE CART_ADDR_DATA+RESTLESS ; Set to output
+        .BYTE CART_ADDR_DATA+RESTLESS
+        .BYTE TXOPEN
+
+MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values to INIT in loop
+
+; 03D0
+
+MikeyOffsets
+; Mikey addresses to be initialized (add to Mikey range offset $FD00)
+		.BYTE <SDONEACK
+		.BYTE <DISPCTL
+		.BYTE <DISPADRH
+		.BYTE <DISPADRL
+        .BYTE <INTRST
+        .BYTE <TIMER7+TIM_CONTROLA
+        .BYTE <TIMER6+TIM_CONTROLA
+        .BYTE <TIMER5+TIM_CONTROLA
+        .BYTE <TIMER4+TIM_CONTROLA
+        .BYTE <TIMER3+TIM_CONTROLA
+        .BYTE <TIMER1+TIM_CONTROLA
+		.BYTE <PBKUP
+		.BYTE <TIMER2+TIM_CONTROLA
+		.BYTE <TIMER2+TIM_BACKUP
+		.BYTE <TIMER0+TIM_CONTROLA
+		.BYTE <TIMER0+TIM_BACKUP
+		.BYTE <AUDIO0+AUD_CONTROL
+		.BYTE <AUDIO1+AUD_CONTROL
+		.BYTE <AUDIO2+AUD_CONTROL
+		.BYTE <AUDIO3+AUD_CONTROL
+		.BYTE <IODIR
+		.BYTE <IODAT
+		.BYTE <SERCTL
