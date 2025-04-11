@@ -194,7 +194,7 @@ branch  .= *
         BCC .30
         LSR A
         BRA $02F0
-.30     JSR $0313
+.30     JSR SetCartAddress
         LDA #$09
         STA $0C
         LDA #$01
@@ -203,24 +203,24 @@ branch  .= *
         STA $04
         LDA #$00
         STA $05
-        JSR $0343
+        JSR FunctionX
         LDA $0E
         LDX $0F
         LDY $10
 
 ; Set cart offset into block
-; 0313
-        STA $0B     ; Cart block
-        STX $09     ; Offset
-        STY $0A
+SetCartAddress
+        STA CartPage        ; Cart block
+        STX CartOffsetLow   ; Offset
+        STY CartOffsetHi
         JSR SetCartBlock
-        LDY $0A
-        LDX $09
+        LDY CartOffsetHi
+        LDX CartOffsetLow
         INY
         INX
         BRA .31
-.32      LDA RCART_0
-.31      DEX
+.32     LDA RCART_0         ; Dummy reads to advance ripple counter
+.31     DEX
         BNE .32
         DEY
         BNE .32
