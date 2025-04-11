@@ -24,7 +24,7 @@ cartblock       .DS 1 ; 00
 unknown1        .DS 1 ; 01
 dispptr         .DS 2 ; 02 03
 unknown3        .DS 2 ; 04 05 <-----|
-unknown4        .DS 1 ; 06          |
+CartBlockSize   .DS 1 ; 06          |
 ptr             .DS 2 ; 07 08       |
 CartOffsetLow   .DS 1 ; 09          |
 CartOffsetHi    .DS 1 ; 0A          |
@@ -51,12 +51,14 @@ unknown8        .DS 2 ; 14 15 --|
         BPL .0
 
 ; 020F
-        STZ unknown4
+DetermineBlockSize
+        STZ CartBlockSize
         SEC
-.1      ROL unknown4    ; Loop 1 bit from left to right 
-        JSR $0281       ; Start
-        BCC .1          ; Carry clear means ...
-        LDA #$9A        ; Offset beyond 410 byte encrypted header
+.1      ROL CartBlockSize   ; Loop 1 bit from left to right 
+        JSR $0281           ; Start
+        BCC .1              ; Carry clear means not right block size
+
+        LDA #$9A            ; Offset beyond 410 byte encrypted header
         STA ptr
         LDA #$01
         STA ptr+1
@@ -65,7 +67,7 @@ unknown8        .DS 2 ; 14 15 --|
         BCS .4
         STZ ptr
         LDA #$02
-        STA ptr+1
+        STA ptr+1           ; $0200 to ptr
 .4      LDA #$00
         JSR $032E       ; 
         LDA $12
@@ -108,7 +110,7 @@ InitSuzy ;
         JSR $032E
         BRK             ; Trigger both a software and harddware break
         NOP
-        JMP ($0012)
+        JMP (runptr)
 
 ; 0281
         LDA #$01		; First block
@@ -117,14 +119,14 @@ InitSuzy ;
         TXA
 ; 0289
         JSR SetCartBlock ; Select block number
-        LDA #$00
+        LDA #$00        ; Change branch to go to next instruction
         JSR $0294		; First run
-        CLC				; Now carry flag becomes important
+        CLC				; Carry flag becomes important
         LDA #$0A		; Restore original branch offset
 
 ; 0294
         STA branch+1	; Self-modify code to make branch a NOP on first run
-        LDX unknown4
+        LDX CartBlockSize
         LDA #$00        ; Pointer to $2400
         STA dispptr
         LDA #$24
