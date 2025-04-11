@@ -1,0 +1,246 @@
+* ===========================================================================
+
+	.LIST OFF
+
+		.IN 6502:include/harddefs.i
+        .IN 6502:macros/sys.mac
+
+	.LIST ON
+
+* ===========================================================================
+
+        .ORG $0000
+ptr     .DS 2
+
+* ===========================================================================
+
+        .ORG $2000
+        .RUN *
+
+        SEI
+        CLD
+        LDX #$FF
+        TXS
+
+        INITSYS
+;        LDA #DISP_COLOR+DISP_FOURBIT+DMA_ENABLE
+;        STA DISPCTL_RAM
+;        LDA #LEFTHAND
+;        STA SPRSYS_RAM
+;        STA SPRSYS
+;        LDA #VECTOR_SPACE
+;        STA MAPCTL
+;        LDA #RESTLESS+CART_ADDR_DATA
+;        STA IODAT_RAM
+;        STA IODAT
+;        STA IODIR_RAM
+;        STA IODIR       ; Rest and cart data to output
+;        LDA #TXOPEN		; Open collector
+;        STA SERCTL
+
+        LDA #AUDIN_BIT+RESTLESS+CART_ADDR_DATA
+        STA IODAT
+        STA IODAT_RAM
+        STA IODIR
+        STA IODIR_RAM
+        
+        JSR $20DD	; Ritual 1
+        JSR $20B3	; Receive byte for ...
+        STA $06
+        JSR $20B3
+        STA $07
+        JSR $20B3
+        STA $08
+        JSR $20B3
+        STA $0B
+        JSR $20B3
+        STA $0C
+        JSR $20B3
+        STA $0D
+        STA $09
+        LDA #$00
+        STA ptr
+        LDA #$22
+        STA ptr+1   ; Store address $2200 at $0000
+        LDA #$10
+        STA $0A
+.0      JSR $20B3	; Read and echo byte from page 9 to 1
+        STA (ptr)	; Store byte in ($0000) 
+        INC ptr
+        BNE .0
+        INC ptr+1
+        DEC $0A
+        BNE .0
+        LDA #$00
+        STA $00
+        LDA #$22
+        STA $01
+        LDA #$10
+        STA $0A
+        LDA $06
+        JSR $217B
+        LDA #$08
+        STA IODAT
+        LDX $09
+        LDY #$00
+        LDA ($00),y
+        STA RCART_0
+        INY
+        BNE $2090
+        INC $01
+        DEC $0A
+        DEX
+        BNE $2090
+        INC $06
+        LDA $0A
+        BNE $2082
+        LDA #$1A
+        STA IODAT
+        LDA $06
+        BNE $205B
+        BRK
+        NOP
+        JMP $2000
+
+; Read and echo byte from page 9 to 1
+        JSR $210F	; Read a byte from page 8
+        BPL $20B3	; Wait for strobe on bit 7
+        JMP $2113	; Read from page 9 data
+        PHA
+        JSR $210F	; Read byte from page 8
+        BPL $20BC	; Wait for strobe again
+        PLA			; Restore A
+        JMP $211C	; Write A to page 1 and return
+
+; Ritual 2: Strobe (6), zero to 2, zero to 7
+        JSR $210F	; Read byte from page 8
+        AND #$40	; Wait for strobe on bit 6
+        BEQ $20C5
+        JSR $20FE	; Select (or write zero) page 2
+        JMP $2102	; Page 7 and return
+
+; Ritual 3: Strobe (7), zero to 6, zero to 3
+        JSR $210F	; Read byte from page 8
+        BPL $20D2	; Wait for strobe on bit 7
+        JSR $20FA	; Write zero to page 6
+        JMP $2106	; Write zero to page 3 and return
+
+; Ritual 1 (Preserves A)
+        PHA
+        JSR $210F	; Read a byte from page 8
+        AND #$40		; Check for bit 6
+        BNE $20DE	; Wait
+        JSR $20FA	; Zero to page 6
+        JSR $2102	; Zero to page 7
+        JSR $210F	; Read a byte
+        AND #$40
+        BEQ $20EB	; Wait for strobe again
+        JSR $20FA	; Zero to page 6
+        JSR $2106	; Zero to page 3
+        PLA
+        RTS
+
+        LDA #$06		; Select page 6 
+        BRA $2108
+        LDA #$02		; Select page 2
+        BRA $2108
+        LDA #$07		; Select page 7
+        BRA $2108
+        LDA #$03		; Select page 3
+        JSR $2127
+        STZ RCART_1	; and clear RCART1
+        RTS
+
+; Out A with value from RCART_1
+        LDA #$08
+        BRA $2115
+
+        LDA #$09		; Jumped to from $20B8
+        JSR $2127
+        LDA RCART_1
+        RTS
+
+; Write A to page 1
+        PHA
+        LDA #$01
+        JSR $2127
+        PLA
+        STA RCART_1
+        RTS
+
+; Block select on cartridge bank 1
+; In A, saves X and Y
+; 2127
+SetCartBlock1
+        PHX
+        PHY
+        TAX
+        LDY #POWERON	    ; Power on and cart address strobe to 0
+        STY SYSCTL1	        ; Strobe cart address to increase ripple counter
+        INY
+        LDA IODAT
+        ORA #RESTLESS
+        STA IODAT
+        LDA IODIR_RAM	    ; Toggle a few bits in IODIR
+        ORA #CART_ADDR_DATA ; Cart address data to output
+        ORA #RESTLESS		; Rest output to output
+        STA IODIR
+        LDA IODAT
+        ORA #CART_ADDR_DATA
+        ORA #RESTLESS
+        STA $2179	; Store IODAT value with Rest and Cart Address data set to 1
+        AND #~CART_ADDR_DATA
+        ORA #RESTLESS
+        STA $217A	; Store IODAT with Rest set to 1 and Cart Address data set to 0
+        TXA
+        SEC
+        ROL A
+.2      BCC .0
+        LDX $2179
+        STX IODAT
+        BRA .1
+.0      LDX $217A
+        STX IODAT
+.1      STY SYSCTL1
+        DEY
+        STY SYSCTL1
+        INY
+        ASL A
+        BNE .2
+        LDA #RESTLESS
+        STA IODAT
+        PLY
+        PLX
+        RTS
+
+        .ORG $2179
+
+Unknown1    .DS 2
+
+        .ORG $217B
+SetCartBlock2
+        STA Unknown
+        LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
+        LDA #READ_ENABLE+RESTLESS
+        SEC
+        BRA .10
+.12     BCC .11
+        STY IODAT
+        CLC
+.11     INX
+        STX SYSCTL1
+.10     LDX #POWERON
+        STX SYSCTL1
+        ROL Unknown
+        STA IODAT
+        BNE .12
+        RTS
+
+Unknown .BY 0 
+
+        .ORG $219E
+
+SPRSYS_RAM  .DS 1 ; 219E
+DISPCTL_RAM .DS 1 ; 219F
+IODAT_RAM   .DS 1 ; 21A0
+IODIR_RAM   .DS 1 ; 21A1
