@@ -80,7 +80,7 @@ ReadByte ; 3038 Get a byte from parallel port
 SetPage ; 304B Set cart page routine (preserves X)
         PHX
         SEC
-        BRA .0          ; Branch might be off by 2?
+        BRA .0
 .2      BCC .1
         STX IODAT       ; Cart address data X = %10
         CLC

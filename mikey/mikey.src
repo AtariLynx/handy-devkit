@@ -2,7 +2,7 @@
 
 	.LIST OFF
 
-		.IN harddefs.i
+		.IN 6502:include/harddefs.i
 
 	.LIST ON
 
@@ -72,16 +72,16 @@ encrypted_area	.EQ inputcode
 		.RU *
 
 SetCartBlock
-		; Fill shift register for cartridge (in X, in A)
-		SEC					
+		; Fill shift register for cartridge (in A)
+		SEC				; Marker bit to detect end of shifting
 		BRA .0
 .1		BCC .2
-		STX IODAT		; Set cartridge output (bit to shift into register) to X
+		STX IODAT		; When C set, set bit for shifting to 1 
 		CLC
-.2		INX 
+.2		INX 			; 0th bit now 1 to strobe
 		STX SYSCTL1
-.0		LDX #$02
-		STX SYSCTL1		; Power on and strobe 
+.0		LDX #CART_ADDR_DATA	; Zero for 0th bit is relevant for SYSCTL strobe
+		STX SYSCTL1		; Power on 
 		ROL A
 		STZ IODAT		; Zero for bit to shift into register
 		BNE .1

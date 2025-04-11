@@ -42,8 +42,8 @@ dest_old    .DS 2       ; FA-FB
         STA IODIR
         STA IODAT_RAM
         JSR Write0Page6		; Write zero to page 6 on RCART_1
-        LDA #TXOPEN
-        STA SERCTL
+        LDA #TXOPEN	        ; Turn off serial IRQs before starting
+        STA SERCTL	        ;  and make sure serial port is open-collector
 
 NmiHandler      ; $F931
         STA SaveA 		; Store accumulator, X and Y register for transfer
@@ -82,8 +82,8 @@ Main
 .5      CMP #GO_REQUEST		; Control command: 05 means "Go"
         BNE .3              ; Check whether to return from NMI
 
-        LDA #TXOPEN
-        STA SERCTL
+        LDA #TXOPEN	        ; Turn off serial IRQs before starting
+        STA SERCTL	        ;  and make sure serial port is open-collector
 
 ; Set all interrupt handlers to $F9B9 (RTS)
         LDX #8*2-2
