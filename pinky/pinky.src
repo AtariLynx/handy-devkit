@@ -3,6 +3,8 @@
 	.LIST OFF
 
 		.IN 6502:include/harddefs.i
+		.IN 6502:include/cart.i
+        .IN 6502:macros/zpage.mac
 
 	.LIST ON
 
@@ -14,11 +16,14 @@ WORK_ORG		.EQ $3000
 
 * ===========================================================================
 
-        .ORG $00F0
+NEXTZPG         .= $F0
+
+    BEGIN_ZPAGE
 
 loadptr         .DS 2
 runptr          .DS 2
 
+    END_ZPAGE
 * ===========================================================================
 
         .ORG BASE_ORG
