@@ -3,250 +3,240 @@
 	.LIST OFF
 
 		.IN 6502:include/harddefs.i
-        .IN 6502:macros/sys.mac
+		.IN 6502:macros/sys.mac
 
 	.LIST ON
 
-BASE_ORG    .EQ $2000
-* ===========================================================================
-
-        .ORG $0000
-ptr     .DS 2
+BASE_ORG	.EQ $2000
 
 * ===========================================================================
 
-        .ORG BASE_ORG
-        .RUN *
+		.ORG $0000
+ptr		.DS 2
 
-        SEI
-        CLD
-        LDX #$FF
-        TXS
+* ===========================================================================
 
-        INITSYS
+		.ORG BASE_ORG
+		.RUN *
 
-        LDA #AUDIN_BIT+RESTLESS+CART_ADDR_DATA
-        STA IODAT
-        STA IODAT_RAM
-        STA IODIR
-        STA IODIR_RAM
-        
-        JSR Handshake
-        JSR ReadByte    ; Receive byte for 
-        STA $06
-        JSR ReadByte
-        STA $07
-        JSR ReadByte
-        STA $08
-        JSR ReadByte
-        STA $0B
-        JSR ReadByte
-        STA $0C
-        JSR ReadByte
-        STA $0D
-        STA $09
-.3      LDA #$00
-        STA ptr
-        LDA #$22
-        STA ptr+1       ; Store address $2200 at $0000
+		SEI
+		CLD
+		LDX #$FF
+		TXS
 
-        LDA #$10        ; Read 16 pages into RAM
-        STA $0A
-.0      JSR ReadByte    ; Read and echo byte from page 9 to 1
-        STA (ptr)	    ; Store byte in ($0000) 
-        INC ptr
-        BNE .0
-        INC ptr+1
-        DEC $0A
-        BNE .0
+		INITSYS
 
-        LDA #$00
-        STA ptr
-        LDA #$22
-        STA ptr+1
-        LDA #$10    ; Read another 16 pages
-        STA $0A
-.2      LDA $06
-        JSR SetCartBlock2
-        LDA #$08
-        STA IODAT
-        LDX $09
-        LDY #$00
-.1      LDA (ptr),y
-        STA RCART_0
-        INY
-        BNE .1
-        INC ptr+1
-        DEC $0A
-        DEX
-        BNE .1
-        INC $06
-        LDA $0A
-        BNE .2
-        LDA #$1A
-        STA IODAT
-        LDA $06
-        BNE .3
-        BRK
-        NOP
-        JMP BASE_ORG
+		LDA #AUDIN_BIT+RESTLESS+CART_ADDR_DATA
+		STA IODAT
+		STA IODAT_RAM
+		STA IODIR
+		STA IODIR_RAM
 
-; 20B3
+		JSR InitComm
+		JSR ReadByte	; Receive byte for 
+		STA $06
+		JSR ReadByte
+		STA $07
+		JSR ReadByte
+		STA $08
+		JSR ReadByte
+		STA $0B
+		JSR ReadByte
+		STA $0C
+		JSR ReadByte
+		STA $0D
+		STA $09
+.3		LDA #$00
+		STA ptr
+		LDA #$22
+		STA ptr+1		; Store address $2200 at $0000
+
+		LDA #$10		; Read 16 pages into RAM
+		STA $0A
+.0		JSR ReadByte	; Read and echo byte from page 9 to 1
+		STA (ptr)		; Store byte in ($0000) 
+		INC ptr
+		BNE .0
+		INC ptr+1
+		DEC $0A
+		BNE .0
+
+		LDA #$00
+		STA ptr
+		LDA #$22
+		STA ptr+1
+		LDA #$10		; Read another 16 pages
+		STA $0A
+.2		LDA $06
+		JSR SetCartBlock2
+		LDA #RESTLESS
+		STA IODAT
+		LDX $09
+		LDY #$00
+.1		LDA (ptr),y
+		STA RCART_0
+		INY
+		BNE .1
+		INC ptr+1
+		DEC $0A
+		DEX
+		BNE .1
+		INC $06
+		LDA $0A
+		BNE .2
+		LDA #$1A
+		STA IODAT
+		LDA $06
+		BNE .3
+		BRK
+		NOP
+		JMP BASE_ORG
+
 ; Read and echo byte from page 9 to 1
 ReadByte
-        JSR ReadPage8	; Read a byte from page 8
-        BPL ReadByte    ; Wait for strobe on bit 7
-        JMP ReadPage9   ; Read from page 9 data
-        PHA
-.3      JSR ReadPage8	; Read byte from page 8
-        BPL .3  	    ; Wait for strobe again
-        PLA			    ; Restore A
-        JMP WriteByte   ; Write A to page 1 and return
+		JSR ReadPage8	; Read a byte from page 8
+		BPL ReadByte	; Wait for strobe on bit 7
+		JMP ReadPage9	; Read from page 9 data
+		PHA
+.3		JSR ReadPage8	; Read byte from page 8
+		BPL .3			; Wait for strobe again
+		PLA				; Restore A
+		JMP WriteByte	; Write A to page 1 and return
 
-; 20C5
-; Ritual 2: Strobe (6), zero to 2, zero to 7
-Ritual2
-        JSR ReadPage8	; Read byte from page 8
-        AND #$40	    ; Wait for strobe on bit 6
-        BEQ Ritual2
-        JSR Write0Page2 ; Select (or write zero) page 2
-        JMP Write0Page7 ; Page 7 and return
+; Strobe (6), zero to 2, zero to 7
+BeginUpload
+		JSR ReadPage8	; Read byte from page 8
+		AND #$40		; Wait for strobe on bit 6
+		BEQ BeginUpload
+		JSR Write0Page2	; Select (or write zero) page 2
+		JMP Write0Page7	; Page 7 and return
 
-; 20D2
-; Ritual 3: Strobe (7), zero to 6, zero to 3
-Ritual3
-        JSR ReadPage8	; Read byte from page 8
-        BPL Ritual3     ; Wait for strobe on bit 7
-        JSR Write0Page6 ; Write zero to page 6
-        JMP Write0Page3 ; Write zero to page 3
+; Strobe (7), zero to 6, zero to 3
+EndUpload
+		JSR ReadPage8	; Read byte from page 8
+		BPL EndUpload	; Wait for strobe on bit 7
+		JSR Write0Page6	; Write zero to page 6
+		JMP Write0Page3	; Write zero to page 3
 
-; 20DD
-Handshake ; (Preserves A)
-        PHA
-.1      JSR ReadPage8	; Read a byte from page 8
-        AND #$40		; Check for bit 6
-        BNE .1	        ; Wait
-        JSR Write0Page6 ; Zero to page 6
-        JSR Write0Page7 ; Zero to page 7
-.2      JSR ReadPage8   ; Read a byte from page 8 
-        AND #$40
-        BEQ .2  	    ; Wait for strobe bit 6 again
-        JSR Write0Page6 ; Zero to page 6
-        JSR Write0Page3 ; Zero to page 3
-        PLA
-        RTS
+InitComm ; (Preserves A)
+		PHA
+.1		JSR ReadPage8	; Read a byte from page 8
+		AND #$40		; Check for bit 6
+		BNE .1			; Wait
+		JSR Write0Page6	; Zero to page 6
+		JSR Write0Page7	; Zero to page 7
+.2		JSR ReadPage8	; Read a byte from page 8 
+		AND #$40
+		BEQ .2			; Wait for strobe bit 6 again
+		JSR Write0Page6	; Zero to page 6
+		JSR Write0Page3	; Zero to page 3
+		PLA
+		RTS
 
-Write0Page6 ; 20FA
-        LDA #$06		; Select page 6 
-        BRA WriteCart1
-Write0Page2 ; 20FE
-        LDA #$02		; Select page 2
-        BRA WriteCart1
-Write0Page7 ; 2102
-        LDA #$07		; Select page 7
-        BRA WriteCart1
-Write0Page3 ; 2106
-        LDA #$03		; Select page 3
+Write0Page6
+		LDA #$06		; Select page 6 
+		BRA WriteCart1
+Write0Page2
+		LDA #$02		; Select page 2
+		BRA WriteCart1
+Write0Page7
+		LDA #$07		; Select page 7
+		BRA WriteCart1
+Write0Page3
+		LDA #$03		; Select page 3
 WriteCart1
-        JSR $2127
-        STZ RCART_1	    ; Clear RCART_1
-        RTS
+		JSR SetCartBlock1
+		STZ RCART_1		; Clear RCART_1
+		RTS
 
 ; Out A with value from RCART_1
-ReadPage8 ; 210F
-        LDA #$08
-        BRA ReadCart1
-ReadPage9 ; 2113
-        LDA #$09
+ReadPage8
+		LDA #$08
+		BRA ReadCart1
+ReadPage9
+		LDA #$09
 ReadCart1
-        JSR SetCartBlock1
-        LDA RCART_1
-        RTS
+		JSR SetCartBlock1
+		LDA RCART_1
+		RTS
 
-; 211C
-; Write A to page 1
+; Write A to page 1, preserves A
 WriteByte
-        PHA
-        LDA #$01
-        JSR SetCartBlock1
-        PLA
-        STA RCART_1
-        RTS
+		PHA
+		LDA #$01
+		JSR SetCartBlock1
+		PLA
+		STA RCART_1
+		RTS
 
 ; Block select on cartridge bank 1?
 ; In A, saves X and Y
-; 2127
 SetCartBlock1
-        PHX
-        PHY
-        TAX
-        LDY #POWERON	    ; Power on and cart address strobe to 0
-        STY SYSCTL1	        ; Strobe cart address to reset ripple counter
-        INY
-        LDA IODAT
-        ORA #RESTLESS
-        STA IODAT
-        LDA IODIR_RAM	    ; Toggle a few bits in IODIR
-        ORA #CART_ADDR_DATA ; Cart address data to output
-        ORA #RESTLESS		; Rest output to output
-        STA IODIR
-        LDA IODAT
-        ORA #CART_ADDR_DATA
-        ORA #RESTLESS
-        STA .fe	        ; Store IODAT value with Rest and Cart Address data set to 1
-        AND #~CART_ADDR_DATA
-        ORA #RESTLESS
-        STA .ff	        ; Store IODAT with Rest set to 1 and Cart Address data set to 0
-        TXA
-        SEC
-        ROL A
-.2      BCC .0
-        LDX $2179
-        STX IODAT
-        BRA .1
-.0      LDX $217A
-        STX IODAT
-.1      STY SYSCTL1
-        DEY
-        STY SYSCTL1
-        INY
-        ASL A
-        BNE .2
-        LDA #RESTLESS
-        STA IODAT
-        PLY
-        PLX
-        RTS
+		PHX
+		PHY
+		TAX
+		LDY #POWERON		; Power on and cart address strobe to 0
+		STY SYSCTL1			; Strobe cart address to reset ripple counter
+		INY
+		LDA IODAT
+		ORA #RESTLESS
+		STA IODAT
+		LDA IODIR_RAM		; Toggle a few bits in IODIR
+		ORA #CART_ADDR_DATA	; Cart address data to output
+		ORA #RESTLESS		; Rest output to output
+		STA IODIR
+		LDA IODAT
+		ORA #CART_ADDR_DATA
+		ORA #RESTLESS
+		STA .fd				; Store IODAT value with Rest and Cart Address data set to 1
+		AND #~CART_ADDR_DATA
+		ORA #RESTLESS
+		STA .fe				; Store IODAT with Rest set to 1 and Cart Address data set to 0
+		TXA
+		SEC
+		ROL A
+.2		BCC .0
+		LDX $2179
+		STX IODAT
+		BRA .1
+.0		LDX $217A
+		STX IODAT
+.1		STY SYSCTL1
+		DEY
+		STY SYSCTL1
+		INY
+		ASL A
+		BNE .2
+		LDA #RESTLESS
+		STA IODAT
+		PLY
+		PLX
+		RTS
 
-        .ORG $2179
+.fd		.DS 1
+.fe		.DS 1
 
-.fe     .DS 1
-.ff     .DS 1
-
-        .ORG $217B
 SetCartBlock2
-        STA .ff
-        LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
-        LDA #READ_ENABLE+RESTLESS
-        SEC
-        BRA .2
-.0      BCC .1
-        STY IODAT       ; Set CART_ADDR_DATA to clock in 1 bit
-        CLC
-.1      INX             ; Adds in CART_ADDR_STROBE
-        STX SYSCTL1
-.2      LDX #POWERON
-        STX SYSCTL1
-        ROL .ff
-        STA IODAT
-        BNE .0          ; Reset CART_ADDR_DATA to clock 0 bit and power ROM
-        RTS
+		STA .ff
+		LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
+		LDA #READ_ENABLE+RESTLESS
+		SEC
+		BRA .2
+.0		BCC .1
+		STY IODAT		; Set CART_ADDR_DATA to clock in 1 bit
+		CLC
+.1		INX				; Adds in CART_ADDR_STROBE
+		STX SYSCTL1
+.2		LDX #POWERON
+		STX SYSCTL1
+		ROL .ff
+		STA IODAT
+		BNE .0			; Reset CART_ADDR_DATA to clock 0 bit and power ROM
+		RTS
 
-.ff     .BY 0 
+.ff		.BY 0
 
-        .ORG $219E
-
-SPRSYS_RAM  .DS 1 ; 219E
-DISPCTL_RAM .DS 1 ; 219F
-IODAT_RAM   .DS 1 ; 21A0
-IODIR_RAM   .DS 1 ; 21A1
+SPRSYS_RAM		.DS 1 ; 219E
+DISPCTL_RAM		.DS 1 ; 219F
+IODAT_RAM		.DS 1 ; 21A0
+IODIR_RAM		.DS 1 ; 21A1
