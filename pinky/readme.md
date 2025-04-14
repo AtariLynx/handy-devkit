@@ -23,6 +23,7 @@ copy pinky.pre DF0:input
 
 copy DF0:output pinky.enc
 postmod pinky.enc pinky.rom 3
+make_lnx pinky.rom -b0 128K
 ```
 
 The other files are for reference:

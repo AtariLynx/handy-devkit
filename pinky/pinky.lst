@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12520:11:54 Page    1
-                                                        20:11:54  
+Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    1
+                                                        21:14:14  
 
     1                   * ====================================================
     2                   
@@ -59,8 +59,8 @@
    53 0227:20 ** **             JSR OFFSET+SetPage  ; Select cartridge page 6
    54 022A:9C B3 FC             STZ RCART_1         ; Write acknowledge
    55 022D:20 ** **             JSR OFFSET+ReadWord ; Get address
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12520:11:54 Page    2
-                                                        20:11:54  
+Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    2
+                                                        21:14:14  
 
    56 0230:86 F0                STX loadptr+LO      ; Set as both load and run
    57 0232:86 F2                STX runptr+LO
@@ -110,20 +110,22 @@
   101 0280:FA                   PLX
   102 0281:60                   RTS
   103                   
-  104                       #REPEAT 20
-  105 MACRO                     .BYTE $00
-  106                       #ENDM
+  104      0066         LOAD_COUNT  .EQ *-NmiHandler
+  105                   
+  106                       #REPEAT 20
+  107 MACRO                     .BYTE $00
+  108                       #ENDM
     1 0282:00         +         .BYTE $00
     2 0283:00         +         .BYTE $00
     3 0284:00         +         .BYTE $00
     4 0285:00         +         .BYTE $00
     5 0286:00         +         .BYTE $00
     6 0287:00         +         .BYTE $00
+Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    3
+                        pinky.src                       21:14:14  
+
     7 0288:00         +         .BYTE $00
     8 0289:00         +         .BYTE $00
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12520:11:54 Page    3
-                        pinky.src                       20:11:54  
-
     9 028A:00         +         .BYTE $00
    10 028B:00         +         .BYTE $00
    11 028C:00         +         .BYTE $00
@@ -137,10 +139,8 @@
    19 0294:00         +         .BYTE $00
    20 0295:00         +         .BYTE $00
    21                 + 
-  107                   
-  108      007A         LOAD_COUNT  .EQ *-NmiHandler
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12520:11:54 Page    4
-                                                        20:11:54  
+Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    4
+                                                        21:14:14  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -200,8 +200,8 @@ $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
 $FDAF GREENF                            $FC00 HARDWARE_START
 $FD00 HCOUNT                            $0020 HFLIP
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12520:11:54 Page    5
-                                                        20:11:54  
+Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    5
+                                                        21:14:14  
 
 $0001 HI                                $FC05 HOFFH
 $FC04 HOFFL                             $0001 HORIZONTAL_INT
@@ -219,7 +219,7 @@ $0020 LEFT1_SELECT                      $0040 LEFT2_SELECT
 $0080 LEFT3_SELECT                      $0008 LEFTHAND
 $0008 LEFTHANDED                        $00F0 LEFT_ATTENMASK
 $0080 LITERAL                           $0000 LO
-$007A LOAD_COUNT                        $FFF9 MAPCTL
+$0066 LOAD_COUNT                        $FFF9 MAPCTL
 $FC55 MATHA                             $FC54 MATHB
 $FC53 MATHC                             $0020 MATHCARRY
 $FC52 MATHD                             $FC63 MATHE
@@ -262,8 +262,8 @@ $FC10 SCBNEXTL                          $FC23 SCVPOSH
 $FC22 SCVPOSL                           $FD90 SDONEACK
 $FD8C SERCTL                            $FD8D SERDAT
 $FD10 SERIALRATE                        $0010 SERIAL_INT
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12520:11:54 Page    6
-                                                        20:11:54  
+Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    6
+                                                        21:14:14  
 
 $0007 SHADOW_SPRITE                     $0080 SIGNMATH
 $0004 SKIP_SPRITE                       $FC82 SPRCOLL

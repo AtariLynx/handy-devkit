@@ -101,8 +101,8 @@ SetPage ; 304B Set cart page routine (preserves X)
         PLX
         RTS
 
+LOAD_COUNT  .EQ *-NmiHandler
+
     #REPEAT 20
         .BYTE $00
     #ENDM
-
-LOAD_COUNT  .EQ *-NmiHandler
