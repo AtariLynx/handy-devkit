@@ -80,7 +80,7 @@ SetCartBlock
 		CLC
 .2		INX 			; 0th bit now 1 to strobe
 		STX SYSCTL1
-.0		LDX #CART_ADDR_DATA	; Zero for 0th bit is relevant for SYSCTL strobe
+.0		LDX #POWERON	; Zero for 0th bit is relevant for SYSCTL strobe
 		STX SYSCTL1		; Power on 
 		ROL A
 		STZ IODAT		; Zero for bit to shift into register
@@ -188,6 +188,8 @@ InitSuzy
 		STZ SDONEACK	; Clear SDONEACK
 		JMP InitMikey	; Call routine to initialize Mikey
 
+OFFSET	.EQ WORK_ORG-*
+
 Decrypt
 		LDA #<scratch0
 		STA acc0		; Pointer to start of zero page temporary data
@@ -219,11 +221,11 @@ Decrypt
 		STA $5047		; Self-modifying code (see FF08)
 		CLC
 		LDX #SIZEKEY-1
-		ROL $00,x		; Operand corresponds to $5037
+.23		ROL $00,x		; Operand corresponds to $5037
 		DEX
-		BPL $FEF7
+		BPL .23
 		ASL $0A
-		BCC $FF11
+		BCC .24
 		LDX #$32
 		CLC
 .21		LDA dest,x		; Operand corresponds to $5043
@@ -231,9 +233,9 @@ Decrypt
 		STA dest,x		; Operand corresponds to $5047
 		DEX
 		BPL .21
- 		JSR $505D		; Call reduce method
+ 		JSR OFFSET+MontgomeryReduce
 		BCC .22
-		JSR $505D		; Call reduce method
+.24		JSR OFFSET+MontgomeryReduce
 .22		LSR $08
 		BNE .20
 		INY

@@ -25,9 +25,10 @@ unknown1		.DS 1 ; 01
 dispptr			.DS 2 ; 02 03
 unknown3		.DS 2 ; 04 05 <-----|
 CartBlockSize	.DS 1 ; 06          |
-ptr				.DS 2 ; 07 08       |
-CartOffsetLow	.DS 1 ; 09          |
-CartOffsetHi	.DS 1 ; 0A          |
+CartOffsetLo	.DS 1 ; 07          |
+CartOffsetHi	.DS 1 ; 08          |
+unknown2		.DS 1 ; 09          |
+unknown4		.DS 1 ; 0A          |
 CartPage		.DS 1 ; 0B          |
 unknown6		.DS 2 ; 0C 0D <-|   |
 unknown7		.DS 4           |   |
@@ -58,9 +59,9 @@ DetermineBlockSize
 		BCC .1				; Carry clear means not right block size
 
 		LDA #$9A			; Offset beyond 410 byte encrypted header
-		STA ptr
+		STA CartOffsetLo
 		LDA #$01
-		STA ptr+1
+		STA CartOffsetHi
 		JSR $02B8
 
 		BCS .4
@@ -210,11 +211,11 @@ branch	.= *
 ; Set cart offset into block
 SetCartAddress
 		STA CartPage		; Cart block
-		STX CartOffsetLow	; Offset
+		STX CartOffsetLo	; Offset
 		STY CartOffsetHi
 		JSR SetCartBlock
 		LDY CartOffsetHi
-		LDX CartOffsetLow
+		LDX CartOffsetLo
 		INY
 		INX
 		BRA .31

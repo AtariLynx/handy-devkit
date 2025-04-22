@@ -1,146 +1,148 @@
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    1
-                                                        21:14:14  
+Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    1
+                                                        11:40:58  
 
     1                   * ====================================================
     2                   
     3                   	.LIST OFF
     9                   	.LIST ON
    10                   
-   11      0000         LO              .EQ 0
-   12      0001         HI              .EQ 1
+   11      0000         LO				.EQ 0
+   12      0001         HI				.EQ 1
    13                   
    14      0200         BASE_ORG		.EQ $0200
-   15      3000         NMI_ORG		    .EQ $3000
+   15      3000         NMI_ORG			.EQ $3000
    16                   
    17                   * ====================================================
    18                   
-   19      00F0         NEXTZPG         .= $F0
+   19      00F0         NEXTZPG			.= $F0
    20                   
-   21                       BEGIN_ZPAGE
+   21                   	BEGIN_ZPAGE
     1      FFFE       + TEMPORG	  .= *
     2 FFFE:           + 	  .ORG NEXTZPG
     3                 + 
    22                   
-   23 00F0:             loadptr         .DS 2
-   24 00F2:             runptr          .DS 2
+   23 00F0:             loadptr			.DS 2
+   24 00F2:             runptr			.DS 2
    25                   
-   26                       END_ZPAGE
+   26                   	END_ZPAGE
     1      00F4       + NEXTZPG	  .= *
     2      FALSE        	  #IF NEXTZPG > $0100
     4                 + 	  #ENDIF
     5 00F4:           + 	  .ORG TEMPORG
     6                 + 
-   27                   * ====================================================
-   28                   
-   29 FFFE:                     .ORG BASE_ORG
-   30                           .RUN *
-   31                   
-   32 0200:A2 **                LDX #LOAD_COUNT     ; $66 bytes
-   33 0202:BD ** **     .0      LDA NmiHandler-1,X  ; Copy from $021C to $3000
-   34 0205:9D FF 2F             STA NMI_ORG-1,X
-   35 0208:CA                   DEX
-   36 0209:D0 F7                BNE .0
-   37 020B:A9 08                LDA #VECTOR_SPACE
-   38 020D:8D F9 FF             STA MAPCTL          ; Vectors to RAM
-   39 0210:A9 00                LDA #<NMI_ORG
-   40 0212:8D FA FF             STA CPU_NMI+LO      ; Set NMI to point to code
-   41 0215:A9 30                LDA #>NMI_ORG
-   42 0217:8D FB FF             STA CPU_NMI+HI
-   43 021A:80 FE        .1      BRA .1              ; Wait for NMI
-   44                   
-   45      2DE4         OFFSET  .EQ NMI_ORG-*
-   46                   
-   47 021C:             NmiHandler
-   48 021C:A9 02                LDA #CART_ADDR_DATA
-   49 021E:8D 8B FD             STA IODAT
-   50 0221:1A                   INC A
-   51 0222:8D 8A FD             STA IODIR
-   52 0225:A9 06                LDA #06
-   53 0227:20 ** **             JSR OFFSET+SetPage  ; Select cartridge page 6
-   54 022A:9C B3 FC             STZ RCART_1         ; Write acknowledge
-   55 022D:20 ** **             JSR OFFSET+ReadWord ; Get address
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    2
-                                                        21:14:14  
+   27                   
+   28                   * ====================================================
+   29                   
+   30 FFFE:             		.ORG BASE_ORG
+   31                   		.RUN *
+   32                   
+   33 0200:A2 **        		LDX #LOAD_COUNT		; $66 bytes
+   34 0202:BD ** **     .0		LDA NmiHandler-1,X	; Copy from $021C to $3000
+   35 0205:9D FF 2F     		STA NMI_ORG-1,X
+   36 0208:CA           		DEX
+   37 0209:D0 F7        		BNE .0
+   38 020B:A9 08        		LDA #VECTOR_SPACE
+   39 020D:8D F9 FF     		STA MAPCTL			; Vectors to RAM
+   40 0210:A9 00        		LDA #<NMI_ORG
+   41 0212:8D FA FF     		STA CPU_NMI+LO		; Set NMI to point to code
+   42 0215:A9 30        		LDA #>NMI_ORG
+   43 0217:8D FB FF     		STA CPU_NMI+HI
+   44 021A:80 FE        .1		BRA .1				; Wait for NMI
+   45                   
+   46      2DE4         OFFSET  .EQ NMI_ORG-*
+   47                   
+   48 021C:             NmiHandler
+   49 021C:A9 02        		LDA #CART_ADDR_DATA
+   50 021E:8D 8B FD     		STA IODAT
+   51 0221:1A           		INC A
+   52 0222:8D 8A FD     		STA IODIR
+   53 0225:A9 06        		LDA #06
+   54 0227:20 ** **     		JSR OFFSET+SetPage	; Select cartridge page 6
+   55 022A:9C B3 FC     		STZ RCART_1			; Write acknowledge
+Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    2
+                                                        11:40:58  
 
-   56 0230:86 F0                STX loadptr+LO      ; Set as both load and run
-   57 0232:86 F2                STX runptr+LO
-   58 0234:85 F1                STA loadptr+HI
-   59 0236:85 F3                STA runptr+HI
-   60 0238:20 ** **             JSR OFFSET+ReadWord ; Get length
-   61 023B:A8                   TAY                 ; Y is MSB, X is LSB (2's 
-   62 023C:20 ** **     .1      JSR OFFSET+ReadByte ; Read program byte 
-   63 023F:92 F0                STA (loadptr)       ; Store at current load ad
-   64 0241:E6 F0                INC loadptr+LO      ; Next address
-   65 0243:D0 **                BNE .0
-   66 0245:E6 F1                INC loadptr+HI
-   67 0247:E8           .0      INX                 ; Adjust counters
-   68 0248:D0 F2                BNE .1
-   69 024A:C8                   INY
-   70 024B:D0 EF                BNE .1
-   71 024D:6C F2 00             JMP (runptr)        ; Run program at run addre
-   72                   
-   73 0250:             ReadWord ; $3034
-   74 0250:20 ** **             JSR OFFSET+ReadByte
-   75 0253:AA                   TAX
-   76                   
-   77 0254:             ReadByte ; 3038 Get a byte from parallel port
-   78 0254:A9 08                LDA #08
-   79 0256:20 ** **             JSR OFFSET+SetPage  ; Select cartridge page 8
-   80 0259:AD B3 FC     .0      LDA RCART_1         ; Read strobe from port
-   81 025C:10 FB                BPL .0              ; Wait for strobe
-   82 025E:A9 09                LDA #09
-   83 0260:20 ** **             JSR OFFSET+SetPage  ; Select cartridge page 9
-   84 0263:AD B3 FC             LDA RCART_1         ; Read data byte
-   85 0266:60                   RTS
-   86                   
-   87 0267:             SetPage ; 304B Set cart page routine (preserves X)
-   88 0267:DA                   PHX
-   89 0268:38                   SEC
-   90 0269:80 **                BRA .0
-   91 026B:90 **        .2      BCC .1
-   92 026D:8E 8B FD             STX IODAT       ; Cart address data X = %10
-   93 0270:18                   CLC
-   94 0271:E8           .1      INX
-   95 0272:8E 87 FD             STX SYSCTL1    ; strobe shifter    X = %11
-   96 0275:A2 02        .0      LDX #POWERON
-   97 0277:8E 87 FD             STX SYSCTL1    ; strobe shifter    X = %10
-   98 027A:2A                   ROL A
-   99 027B:9C 8B FD             STZ IODAT      ; cart address data   = %00
-  100 027E:D0 EB                BNE .2
-  101 0280:FA                   PLX
-  102 0281:60                   RTS
-  103                   
-  104      0066         LOAD_COUNT  .EQ *-NmiHandler
-  105                   
-  106                       #REPEAT 20
-  107 MACRO                     .BYTE $00
-  108                       #ENDM
-    1 0282:00         +         .BYTE $00
-    2 0283:00         +         .BYTE $00
-    3 0284:00         +         .BYTE $00
-    4 0285:00         +         .BYTE $00
-    5 0286:00         +         .BYTE $00
-    6 0287:00         +         .BYTE $00
-Epyx HandyAsm 1.12      pinky.src                       13-Apr-12521:14:14 Page    3
-                        pinky.src                       21:14:14  
+   56 022D:20 ** **     		JSR OFFSET+ReadWord	; Get address
+   57 0230:86 F0        		STX loadptr+LO		; Set as both load and run address
+   58 0232:86 F2        		STX runptr+LO
+   59 0234:85 F1        		STA loadptr+HI
+   60 0236:85 F3        		STA runptr+HI
+   61 0238:20 ** **     		JSR OFFSET+ReadWord	; Get length
+   62 023B:A8           		TAY					; Y is MSB, X is LSB (2's complement)
+   63 023C:20 ** **     .1		JSR OFFSET+ReadByte	; Read program byte 
+   64 023F:92 F0        		STA (loadptr)		; Store at current load address
+   65 0241:E6 F0        		INC loadptr+LO		; Next address
+   66 0243:D0 **        		BNE .0
+   67 0245:E6 F1        		INC loadptr+HI
+   68 0247:E8           .0		INX					; Adjust counters
+   69 0248:D0 F2        		BNE .1
+   70 024A:C8           		INY
+   71 024B:D0 EF        		BNE .1
+   72 024D:6C F2 00     		JMP (runptr)		; Run program at run address
+   73                   
+   74 0250:             ReadWord ; $3034
+   75 0250:20 ** **     		JSR OFFSET+ReadByte
+   76 0253:AA           		TAX
+   77                   
+   78 0254:             ReadByte ; 3038 Get a byte from parallel port
+   79 0254:A9 08        		LDA #08
+   80 0256:20 ** **     		JSR OFFSET+SetPage	; Select cartridge page 8
+   81 0259:AD B3 FC     .0		LDA RCART_1			; Read strobe from port
+   82 025C:10 FB        		BPL .0				; Wait for strobe
+   83 025E:A9 09        		LDA #09
+   84 0260:20 ** **     		JSR OFFSET+SetPage	; Select cartridge page 9
+   85 0263:AD B3 FC     		LDA RCART_1			; Read data byte
+   86 0266:60           		RTS
+   87                   
+   88 0267:             SetPage ; 304B Set cart page routine (preserves X)
+   89 0267:DA           		PHX
+   90 0268:38           		SEC
+   91 0269:80 **        		BRA .0
+   92 026B:90 **        .2		BCC .1
+   93 026D:8E 8B FD     		STX IODAT			; Cart address data X = %10
+   94 0270:18           		CLC
+   95 0271:E8           .1		INX
+   96 0272:8E 87 FD     		STX SYSCTL1			; Strobe shifter    X = %11
+   97 0275:A2 02        .0		LDX #POWERON
+   98 0277:8E 87 FD     		STX SYSCTL1			; Strobe shifter    X = %10
+   99 027A:2A           		ROL A
+  100 027B:9C 8B FD     		STZ IODAT			; Cart address data   = %00
+  101 027E:D0 EB        		BNE .2
+  102 0280:FA           		PLX
+  103 0281:60           		RTS
+  104                   
+  105      0066         LOAD_COUNT	.EQ *-NmiHandler
+  106      0082         SIZE		.EQ *-BASE_ORG
+  107                   
+  108                   	#REPEAT 150-SIZE
+  109 MACRO             		.BYTE $00
+  110                   	#ENDM
+    1 0282:00         + 		.BYTE $00
+    2 0283:00         + 		.BYTE $00
+    3 0284:00         + 		.BYTE $00
+    4 0285:00         + 		.BYTE $00
+Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    3
+                        pinky.src                       11:40:58  
 
-    7 0288:00         +         .BYTE $00
-    8 0289:00         +         .BYTE $00
-    9 028A:00         +         .BYTE $00
-   10 028B:00         +         .BYTE $00
-   11 028C:00         +         .BYTE $00
-   12 028D:00         +         .BYTE $00
-   13 028E:00         +         .BYTE $00
-   14 028F:00         +         .BYTE $00
-   15 0290:00         +         .BYTE $00
-   16 0291:00         +         .BYTE $00
-   17 0292:00         +         .BYTE $00
-   18 0293:00         +         .BYTE $00
-   19 0294:00         +         .BYTE $00
-   20 0295:00         +         .BYTE $00
+    5 0286:00         + 		.BYTE $00
+    6 0287:00         + 		.BYTE $00
+    7 0288:00         + 		.BYTE $00
+    8 0289:00         + 		.BYTE $00
+    9 028A:00         + 		.BYTE $00
+   10 028B:00         + 		.BYTE $00
+   11 028C:00         + 		.BYTE $00
+   12 028D:00         + 		.BYTE $00
+   13 028E:00         + 		.BYTE $00
+   14 028F:00         + 		.BYTE $00
+   15 0290:00         + 		.BYTE $00
+   16 0291:00         + 		.BYTE $00
+   17 0292:00         + 		.BYTE $00
+   18 0293:00         + 		.BYTE $00
+   19 0294:00         + 		.BYTE $00
+   20 0295:00         + 		.BYTE $00
    21                 + 
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    4
-                                                        21:14:14  
+Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    4
+                                                        11:40:58  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -200,8 +202,8 @@ $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
 $FDAF GREENF                            $FC00 HARDWARE_START
 $FD00 HCOUNT                            $0020 HFLIP
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    5
-                                                        21:14:14  
+Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    5
+                                                        11:40:58  
 
 $0001 HI                                $FC05 HOFFH
 $FC04 HOFFL                             $0001 HORIZONTAL_INT
@@ -262,51 +264,52 @@ $FC10 SCBNEXTL                          $FC23 SCVPOSH
 $FC22 SCVPOSL                           $FD90 SDONEACK
 $FD8C SERCTL                            $FD8D SERDAT
 $FD10 SERIALRATE                        $0010 SERIAL_INT
-Epyx HandyAsm 1.12      Symbols                         13-Apr-12521:14:14 Page    6
-                                                        21:14:14  
+Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    6
+                                                        11:40:58  
 
 $0007 SHADOW_SPRITE                     $0080 SIGNMATH
-$0004 SKIP_SPRITE                       $FC82 SPRCOLL
-$FC80 SPRCTL0                           $FC81 SPRCTL1
-$FC13 SPRDLINEH                         $FC12 SPRDLINEL
-$FC21 SPRDOFFH                          $FC20 SPRDOFFL
-$FC91 SPRGO                             $FC19 SPRHSIZH
-$FC18 SPRHSIZL                          $FC83 SPRINIT
-$0002 SPRITESTOP                        $0002 SPRITETOSTOP
-$0001 SPRITEWORKING                     $0001 SPRITE_GO
-$FC92 SPRSYS                            $FC1B SPRVSIZH
-$FC1A SPRVSIZL                          $FC1D STRETCHH
-$FC1C STRETCHL                          $FC90 SUZYBUSEN
-$FC88 SUZYHREV                          $FC89 SUZYSREV
-$FC00 SUZY_BASE                         $0001 SUZY_SPACE
-$FCB1 SWITCHES                          $FD87 SYSCTL1
-$0267 SetPage                           $FFFE TEMPORG
-$0080 THREE_PER_PIXEL                   $FC03 TILTACUMH
-$FC02 TILTACUML                         $FC1F TILTH
-$FC1E TILTL                             $FD00 TIMER0
-$0001 TIMER0_INT                        $FD04 TIMER1
-$0002 TIMER1_INT                        $FD08 TIMER2
-$0004 TIMER2_INT                        $FD0C TIMER3
-$0008 TIMER3_INT                        $FD10 TIMER4
-$FD14 TIMER5                            $0020 TIMER5_INT
-$FD18 TIMER6                            $0040 TIMER6_INT
-$FD1C TIMER7                            $0080 TIMER7_INT
-$0008 TIMER_DONE                        $0000 TIM_BACKUP
-$0001 TIM_CONTROLA                      $0003 TIM_CONTROLB
-$0002 TIM_COUNT                         $FC01 TMPADRH
-$FC00 TMPADRL                           $0080 TURBO_DISABLE
-$0040 TWO_PER_PIXEL                     $0002 TXBRK
-$0020 TXEMPTY                           $0080 TXINTEN
-$0004 TXOPEN                            $0080 TXRDY
-$0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
-$FD08 VCOUNT                            $0008 VECTOR_SPACE
-$0004 VERTICAL_INT                      $0010 VFLIP
-$FC0D VIDADRH                           $FC0C VIDADRL
-$FC09 VIDBASH                           $FC08 VIDBASL
-$FC07 VOFFH                             $FC06 VOFFL
-$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
-$FC27 VSIZACUMH                         $FC26 VSIZACUML
-$FC2B VSIZOFFH                          $FC2A VSIZOFFL
-$0010 VSTRETCH                          $0010 VSTRETCHING
-$0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
-$00F0 loadptr                           $00F2 runptr
+$0082 SIZE                              $0004 SKIP_SPRITE
+$FC82 SPRCOLL                           $FC80 SPRCTL0
+$FC81 SPRCTL1                           $FC13 SPRDLINEH
+$FC12 SPRDLINEL                         $FC21 SPRDOFFH
+$FC20 SPRDOFFL                          $FC91 SPRGO
+$FC19 SPRHSIZH                          $FC18 SPRHSIZL
+$FC83 SPRINIT                           $0002 SPRITESTOP
+$0002 SPRITETOSTOP                      $0001 SPRITEWORKING
+$0001 SPRITE_GO                         $FC92 SPRSYS
+$FC1B SPRVSIZH                          $FC1A SPRVSIZL
+$FC1D STRETCHH                          $FC1C STRETCHL
+$FC90 SUZYBUSEN                         $FC88 SUZYHREV
+$FC89 SUZYSREV                          $FC00 SUZY_BASE
+$0001 SUZY_SPACE                        $FCB1 SWITCHES
+$FD87 SYSCTL1                           $0267 SetPage
+$FFFE TEMPORG                           $0080 THREE_PER_PIXEL
+$FC03 TILTACUMH                         $FC02 TILTACUML
+$FC1F TILTH                             $FC1E TILTL
+$FD00 TIMER0                            $0001 TIMER0_INT
+$FD04 TIMER1                            $0002 TIMER1_INT
+$FD08 TIMER2                            $0004 TIMER2_INT
+$FD0C TIMER3                            $0008 TIMER3_INT
+$FD10 TIMER4                            $FD14 TIMER5
+$0020 TIMER5_INT                        $FD18 TIMER6
+$0040 TIMER6_INT                        $FD1C TIMER7
+$0080 TIMER7_INT                        $0008 TIMER_DONE
+$0000 TIM_BACKUP                        $0001 TIM_CONTROLA
+$0003 TIM_CONTROLB                      $0002 TIM_COUNT
+$FC01 TMPADRH                           $FC00 TMPADRL
+$0080 TURBO_DISABLE                     $0040 TWO_PER_PIXEL
+$0002 TXBRK                             $0020 TXEMPTY
+$0080 TXINTEN                           $0004 TXOPEN
+$0080 TXRDY                             $0004 UNSAFEACCESS
+$0004 UNSAFEACCESSRST                   $FD08 VCOUNT
+$0008 VECTOR_SPACE                      $0004 VERTICAL_INT
+$0010 VFLIP                             $FC0D VIDADRH
+$FC0C VIDADRL                           $FC09 VIDBASH
+$FC08 VIDBASL                           $FC07 VOFFH
+$FC06 VOFFL                             $FC17 VPOSSTRTH
+$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
+$FC26 VSIZACUML                         $FC2B VSIZOFFH
+$FC2A VSIZOFFL                          $0010 VSTRETCH
+$0010 VSTRETCHING                       $0006 XOR_SHADOW_SPRITE
+$0006 XOR_SPRITE                        $00F0 loadptr
+$00F2 runptr                            

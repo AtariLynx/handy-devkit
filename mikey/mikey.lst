@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    1
-                                                        09:20:07  
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    1
+                                                        18:55:51  
 
     1                   * ====================================================
     2                   
@@ -59,8 +59,8 @@
    59                   
    60                   * ====================================================
    61                   * ====================================================
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    2
-                                                        09:20:07  
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    2
+                                                        18:55:51  
 
    62                   
    63                   	#MACRO ECHO_VALUE
@@ -83,7 +83,7 @@
    80 FE08:18           		CLC
    81 FE09:E8           .2		INX 			; 0th bit now 1 to strobe
    82 FE0A:8E 87 FD     		STX SYSCTL1
-   83 FE0D:A2 02        .0		LDX #CART_ADDR_DATA	; Zero for 0th bit is relevant
+   83 FE0D:A2 02        .0		LDX #POWERON	; Zero for 0th bit is relevant for SY
    84 FE0F:8E 87 FD     		STX SYSCTL1		; Power on 
    85 FE12:2A           		ROL A
    86 FE13:9C 8B FD     		STZ IODAT		; Zero for bit to shift into register
@@ -121,8 +121,8 @@
   118 FE41:85 06        		STA ptr+1		; Destination address of decrypted data (
   119 FE43:64 02        		STZ checksum	; Initialize transition byte
   120 FE45:A9 00        		LDA #0			; Prepare for first block
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    3
-                                                        09:20:07  
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    3
+                                                        18:55:51  
 
   121 FE47:20 00 FE     		JSR SetCartBlock
   122                   
@@ -183,8 +183,8 @@
   177 FEA8:80 FE        .6		BRA .6			; Give up and loop forever 
   178                   
   179                   ; Initialize Suzy
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    4
-                                                        09:20:07  
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    4
+                                                        18:55:51  
 
   180 FEAA:             InitSuzy
   181 FEAA:A2 **        		LDX #SUZYVALS_COUNT-1
@@ -197,236 +197,238 @@
   188 FEBB:9C 90 FD     		STZ SDONEACK	; Clear SDONEACK
   189 FEBE:4C 26 FE     		JMP InitMikey	; Call routine to initialize Mikey
   190                   
-  191 FEC1:             Decrypt
-  192 FEC1:A9 11        		LDA #<scratch0
-  193 FEC3:85 0B        		STA acc0		; Pointer to start of zero page temporary 
-  194 FEC5:A9 44        		LDA #<scratch1	; End of working data zero page addre
-  195 FEC7:8D 71 50     		STA $5071		; Self-modifying code (see FF32)
-  196 FECA:A9 AA        		LDA #<inputcode
-  197 FECC:85 0F        		STA input1		; Pointer to start of encrypted data in 
-  198 FECE:20 18 50     		JSR $5018		; Currently FED9: perform first multiplic
-  199 FED1:A5 0B        		LDA acc0		; Transfer pointer to data with enc^2 ...
-  200 FED3:85 0F        		STA input1		; ... to encryption data
-  201 FED5:A9 77        		LDA #<scratch2	; Set pointer for work data right aft
-  202 FED7:85 0B        		STA acc0		; Perform second multiplication of enc * e
-  203                   
-  204                   ; Clear all 51 values of temporary work data
-  205 FED9:A0 32        		LDY #SIZEKEY-1		
-  206 FEDB:A9 00        		LDA #0
-  207 FEDD:91 0B        .10		STA (acc0),y
-  208 FEDF:88           		DEY
-  209 FEE0:10 FB        		BPL .10
-  210                   
-  211                   ; Montgomery multiplication algorithm
-  212 FEE2:C8           		INY				; Y = 0
-  213 FEE3:B1 0F        .19		LDA (input1),y	; Load value from encrypted data (
-  214 FEE5:85 0A        		STA temp0		; Store in work variable
-  215 FEE7:C6 08        		DEC bitcount
-  216 FEE9:A5 0B        .20		LDA acc0		; Change data address to work on
-  217 FEEB:8D 37 50     		STA $5037		; Self-modifying code (see FEF7)
-  218 FEEE:8D 43 50     		STA $5043		; Self-modifying code (see FF04)
-  219 FEF1:8D 47 50     		STA $5047		; Self-modifying code (see FF08)
-  220 FEF4:18           		CLC
-  221 FEF5:A2 32        		LDX #SIZEKEY-1
-  222 FEF7:36 00        		ROL $00,x		; Operand corresponds to $5037
-  223 FEF9:CA           		DEX
-  224 FEFA:10 FB        		BPL $FEF7
-  225 FEFC:06 0A        		ASL $0A
-  226 FEFE:90 11        		BCC $FF11
-  227 FF00:A2 32        		LDX #$32
-  228 FF02:18           		CLC
-  229 FF03:B5 00        .21		LDA dest,x		; Operand corresponds to $5043
-  230 FF05:75 AA        		ADC inputcode,x
-  231 FF07:95 00        		STA dest,x		; Operand corresponds to $5047
-  232 FF09:CA           		DEX
-  233 FF0A:10 F7        		BPL .21
-  234 FF0C:20 5D 50      		JSR $505D		; Call reduce method
-  235 FF0F:90 **        		BCC .22
-  236 FF11:20 5D 50     		JSR $505D		; Call reduce method
-  237 FF14:46 08        .22		LSR $08
-  238 FF16:D0 D1        		BNE .20
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    5
-                                                        09:20:07  
+  191      513F         OFFSET	.EQ WORK_ORG-*
+  192                   
+  193 FEC1:             Decrypt
+  194 FEC1:A9 11        		LDA #<scratch0
+  195 FEC3:85 0B        		STA acc0		; Pointer to start of zero page temporary 
+  196 FEC5:A9 44        		LDA #<scratch1	; End of working data zero page addre
+  197 FEC7:8D 71 50     		STA $5071		; Self-modifying code (see FF32)
+  198 FECA:A9 AA        		LDA #<inputcode
+  199 FECC:85 0F        		STA input1		; Pointer to start of encrypted data in 
+  200 FECE:20 18 50     		JSR $5018		; Currently FED9: perform first multiplic
+  201 FED1:A5 0B        		LDA acc0		; Transfer pointer to data with enc^2 ...
+  202 FED3:85 0F        		STA input1		; ... to encryption data
+  203 FED5:A9 77        		LDA #<scratch2	; Set pointer for work data right aft
+  204 FED7:85 0B        		STA acc0		; Perform second multiplication of enc * e
+  205                   
+  206                   ; Clear all 51 values of temporary work data
+  207 FED9:A0 32        		LDY #SIZEKEY-1		
+  208 FEDB:A9 00        		LDA #0
+  209 FEDD:91 0B        .10		STA (acc0),y
+  210 FEDF:88           		DEY
+  211 FEE0:10 FB        		BPL .10
+  212                   
+  213                   ; Montgomery multiplication algorithm
+  214 FEE2:C8           		INY				; Y = 0
+  215 FEE3:B1 0F        .19		LDA (input1),y	; Load value from encrypted data (
+  216 FEE5:85 0A        		STA temp0		; Store in work variable
+  217 FEE7:C6 08        		DEC bitcount
+  218 FEE9:A5 0B        .20		LDA acc0		; Change data address to work on
+  219 FEEB:8D 37 50     		STA $5037		; Self-modifying code (see FEF7)
+  220 FEEE:8D 43 50     		STA $5043		; Self-modifying code (see FF04)
+  221 FEF1:8D 47 50     		STA $5047		; Self-modifying code (see FF08)
+  222 FEF4:18           		CLC
+  223 FEF5:A2 32        		LDX #SIZEKEY-1
+  224 FEF7:36 00        .23		ROL $00,x		; Operand corresponds to $5037
+  225 FEF9:CA           		DEX
+  226 FEFA:10 FB        		BPL .23
+  227 FEFC:06 0A        		ASL $0A
+  228 FEFE:90 **        		BCC .24
+  229 FF00:A2 32        		LDX #$32
+  230 FF02:18           		CLC
+  231 FF03:B5 00        .21		LDA dest,x		; Operand corresponds to $5043
+  232 FF05:75 AA        		ADC inputcode,x
+  233 FF07:95 00        		STA dest,x		; Operand corresponds to $5047
+  234 FF09:CA           		DEX
+  235 FF0A:10 F7        		BPL .21
+  236 FF0C:20 ** **      		JSR OFFSET+MontgomeryReduce
+  237 FF0F:90 **        		BCC .22
+  238 FF11:20 ** **     .24		JSR OFFSET+MontgomeryReduce
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    5
+                                                        18:55:51  
 
-  239 FF18:C8           		INY
-  240 FF19:C0 33        		CPY #SIZEKEY
-  241 FF1B:90 C6        		BCC .19
-  242 FF1D:60           		RTS				; scratch0 + scratch1 contains enc^2 at first
-  243                   
-  244 FF1E:             MontgomeryReduce
-  245 FF1E:A5 0B        		LDA acc0
-  246 FF20:8D 6C 50     		STA $506C
-  247 FF23:B2 0B        		LDA (acc0)
-  248 FF25:CD ** **     		CMP modulus		; Start of public part of encryption ke
-  249 FF28:90 **        		BCC done
-  250 FF2A:A2 32        		LDX #SIZEKEY-1
-  251 FF2C:B5 00        .30		LDA dest,x
-  252 FF2E:FD ** **     		SBC modulus,x	; Subtract from corresponding byte in 
-  253 FF31:95 00        		STA dest,x		; Operand corresponds to $5071 when copi
-  254 FF33:CA           		DEX
-  255 FF34:10 F6        		BPL .30
-  256 FF36:90 **        		BCC done
-  257 FF38:A5 0B        		LDA acc0
-  258 FF3A:AE 71 50     		LDX $5071
-  259 FF3D:86 0B        		STX acc0		; Update pointer to work data
-  260 FF3F:8D 71 50     		STA $5071		; Self-modify code
-  261 FF42:             done
-  262 FF42:60           		RTS
-  263                   
-  264                   		; SCB data for INSERT GAME sprite
-  265 FF43:05           		.BYTE $05		; SPRCTLO (1 bit/pixel, no flipping, non-
-  266 FF44:93           		.BYTE $93		; SPRCTL1 (Totally literal, HSIZE and VSI
-  267 FF45:00           		.BYTE $00		; SPRCOLL
-  268 FF46:00 00        		.WORD $0000		; Address of next SCB
-  269 FF48:92 50        		.WORD $5092		; Address of SPRDLINE (sprite data)
-  270 FF4A:80 00        		.WORD $0080		; HPOSSTRT 128
-  271 FF4C:48 00        		.WORD $0048		; VPOSSTRT 72
-  272 FF4E:00 04        		.WORD $0400		; HSIZE (magnify by 4 horizontally)
-  273 FF50:00 04        		.WORD $0400		; VSIZE (magnify by 4 vertically)
-  274 FF52:F0           		.BYTE $F0		; Palette colors
-  275                   
-  276                   ; Sprite data (INSERT GAME upside down)
-  277 FF53:04 E2 EA 87  		.BYTE $04, $E2, $EA, $87		; ...000.0...0.0.0.0000...
+  239 FF14:46 08        .22		LSR $08
+  240 FF16:D0 D1        		BNE .20
+  241 FF18:C8           		INY
+  242 FF19:C0 33        		CPY #SIZEKEY
+  243 FF1B:90 C6        		BCC .19
+  244 FF1D:60           		RTS				; scratch0 + scratch1 contains enc^2 at first
+  245                   
+  246 FF1E:             MontgomeryReduce
+  247 FF1E:A5 0B        		LDA acc0
+  248 FF20:8D 6C 50     		STA $506C
+  249 FF23:B2 0B        		LDA (acc0)
+  250 FF25:CD ** **     		CMP modulus		; Start of public part of encryption ke
+  251 FF28:90 **        		BCC done
+  252 FF2A:A2 32        		LDX #SIZEKEY-1
+  253 FF2C:B5 00        .30		LDA dest,x
+  254 FF2E:FD ** **     		SBC modulus,x	; Subtract from corresponding byte in 
+  255 FF31:95 00        		STA dest,x		; Operand corresponds to $5071 when copi
+  256 FF33:CA           		DEX
+  257 FF34:10 F6        		BPL .30
+  258 FF36:90 **        		BCC done
+  259 FF38:A5 0B        		LDA acc0
+  260 FF3A:AE 71 50     		LDX $5071
+  261 FF3D:86 0B        		STX acc0		; Update pointer to work data
+  262 FF3F:8D 71 50     		STA $5071		; Self-modify code
+  263 FF42:             done
+  264 FF42:60           		RTS
+  265                   
+  266                   		; SCB data for INSERT GAME sprite
+  267 FF43:05           		.BYTE $05		; SPRCTLO (1 bit/pixel, no flipping, non-
+  268 FF44:93           		.BYTE $93		; SPRCTL1 (Totally literal, HSIZE and VSI
+  269 FF45:00           		.BYTE $00		; SPRCOLL
+  270 FF46:00 00        		.WORD $0000		; Address of next SCB
+  271 FF48:92 50        		.WORD $5092		; Address of SPRDLINE (sprite data)
+  272 FF4A:80 00        		.WORD $0080		; HPOSSTRT 128
+  273 FF4C:48 00        		.WORD $0048		; VPOSSTRT 72
+  274 FF4E:00 04        		.WORD $0400		; HSIZE (magnify by 4 horizontally)
+  275 FF50:00 04        		.WORD $0400		; VSIZE (magnify by 4 vertically)
+  276 FF52:F0           		.BYTE $F0		; Palette colors
   277                   
-  278 FF57:04 FA AA B7  		.BYTE $04, $FA, $AA, $B7 		; .....0.0.0.0.0.0.0..0..
-  278                   
-  279 FF5B:04 F2 08 97  		.BYTE $04, $F2, $08, $97 		; ....00.00000.000.00.0..
+  278                   ; Sprite data (INSERT GAME upside down)
+  279 FF53:04 E2 EA 87  		.BYTE $04, $E2, $EA, $87		; ...000.0...0.0.0.0000...
   279                   
-  280 FF5F:04 FA 4A F7  		.BYTE $04, $FA, $4A, $F7		; .....0.00.00.0.0....0...
+  280 FF57:04 FA AA B7  		.BYTE $04, $FA, $AA, $B7 		; .....0.0.0.0.0.0.0..0..
   280                   
-  281 FF63:04 E2 E8 87  		.BYTE $04, $E2, $E8, $87		; ...000.0...0.000.0000...
+  281 FF5B:04 F2 08 97  		.BYTE $04, $F2, $08, $97 		; ....00.00000.000.00.0..
   281                   
-  282 FF67:02 FF        		.BYTE $02, $FF					; ........
-  283 FF69:05 B5 11 68  		.BYTE $05, $B5, $11, $68, $FF	; .0..0.0.000.000.0..0
-  283      FF           
-  284 FF6E:04 B5 D7 2D  		.BYTE $04, $B5, $D7, $2D		; .0..0.0...0.0...00.0..0.
-  284                   
-  285 FF72:04 B9 91 0D  		.BYTE $04, $B9, $91, $0D		; .0...00..00.000.0000..0.
-  285                   
-  286 FF76:04 B5 DD 4D  		.BYTE $04, $B5, $DD, $4D		; .0..0.0...0...0.0.00..0.
+  282 FF5F:04 FA 4A F7  		.BYTE $04, $FA, $4A, $F7		; .....0.00.00.0.0....0...
+  282                   
+  283 FF63:04 E2 E8 87  		.BYTE $04, $E2, $E8, $87		; ...000.0...0.000.0000...
+  283                   
+  284 FF67:02 FF        		.BYTE $02, $FF					; ........
+  285 FF69:05 B5 11 68  		.BYTE $05, $B5, $11, $68, $FF	; .0..0.0.000.000.0..0
+  285      FF           
+  286 FF6E:04 B5 D7 2D  		.BYTE $04, $B5, $D7, $2D		; .0..0.0...0.0...00.0..0.
   286                   
-  287 FF7A:05 19 11 68  		.BYTE $05, $19, $11, $68, $FF	; 000..00.000.000.0..0
-  287      FF           
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    6
-                                                        09:20:07  
+  287 FF72:04 B9 91 0D  		.BYTE $04, $B9, $91, $0D		; .0...00..00.000.0000..0.
+  287                   
+  288 FF76:04 B5 DD 4D  		.BYTE $04, $B5, $DD, $4D		; .0..0.0...0...0.0.00..0.
+  288                   
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    6
+                                                        18:55:51  
 
-  288 FF7F:00           		.BYTE $00						;$ End of quadrant
-  289                   
-  290                   ; Start of boot sequence
-  291 FF80:AD 88 FC     		LDA SUZYHREV	; Load hardware version (always 1.0 for
-  292 FF83:F0 7B        		BEQ $0000		
-  293 FF85:68           		PLA
-  294 FF86:68           		PLA
-  295 FF87:68           		PLA
-  296 FF88:68           		PLA
-  297 FF89:A0 02        		LDY #CART_POWER_OFF
-  298 FF8B:8C 8B FD     		STY IODAT		; Set cartridge power off
-  299 FF8E:C8           		INY
-  300 FF8F:8C 8A FD     		STY IODIR		; External power and cart address to outp
-  301 FF92:8C F9 FF     		STY MAPCTL		; Memory map to 03 (Mikey and Suzy addre
-  302 FF95:64 00        		STZ $00			; Set $0000 to 0
-  303 FF97:4C 19 FE     		JMP ClearMemory
-  304                   
-  305                   * ====================================================
-  306                   * ====================================================
-  307                   
-  308 FF9A:             		.ORG $FF9A
+  289 FF7A:05 19 11 68  		.BYTE $05, $19, $11, $68, $FF	; 000..00.000.000.0..0
+  289      FF           
+  290 FF7F:00           		.BYTE $00						;$ End of quadrant
+  291                   
+  292                   ; Start of boot sequence
+  293 FF80:AD 88 FC     		LDA SUZYHREV	; Load hardware version (always 1.0 for
+  294 FF83:F0 7B        		BEQ $0000		
+  295 FF85:68           		PLA
+  296 FF86:68           		PLA
+  297 FF87:68           		PLA
+  298 FF88:68           		PLA
+  299 FF89:A0 02        		LDY #CART_POWER_OFF
+  300 FF8B:8C 8B FD     		STY IODAT		; Set cartridge power off
+  301 FF8E:C8           		INY
+  302 FF8F:8C 8A FD     		STY IODIR		; External power and cart address to outp
+  303 FF92:8C F9 FF     		STY MAPCTL		; Memory map to 03 (Mikey and Suzy addre
+  304 FF95:64 00        		STZ $00			; Set $0000 to 0
+  305 FF97:4C 19 FE     		JMP ClearMemory
+  306                   
+  307                   * ====================================================
+  308                   * ====================================================
   309                   
-  310                   ; Public key modulus for decryption
-  311 FF9A:             modulus
-  312 FF9A:35 B5 A3 94  		.BYTE $35, $B5, $A3, $94, $28, $06, $D8, $A2
-  312      28 06 D8 A2  
-  312                   
-  313 FFA2:26 95 D7 71  		.BYTE $26, $95, $D7, $71, $B2, $3C, $FD, $56
-  313      B2 3C FD 56  
-  313                   
-  314 FFAA:1C 4A 19 B6  		.BYTE $1C, $4A, $19, $B6, $A3, $B0, $26, $00
-  314      A3 B0 26 00  
+  310 FF9A:             		.ORG $FF9A
+  311                   
+  312                   ; Public key modulus for decryption
+  313 FF9A:             modulus
+  314 FF9A:35 B5 A3 94  		.BYTE $35, $B5, $A3, $94, $28, $06, $D8, $A2
+  314      28 06 D8 A2  
   314                   
-  315 FFB2:36 5A 30 6E  		.BYTE $36, $5A, $30, $6E, $3C, $4D, $63, $38
-  315      3C 4D 63 38  
+  315 FFA2:26 95 D7 71  		.BYTE $26, $95, $D7, $71, $B2, $3C, $FD, $56
+  315      B2 3C FD 56  
   315                   
-  316 FFBA:1B D4 1C 13  		.BYTE $1B, $D4, $1C, $13, $64, $89, $36, $4C
-  316      64 89 36 4C  
+  316 FFAA:1C 4A 19 B6  		.BYTE $1C, $4A, $19, $B6, $A3, $B0, $26, $00
+  316      A3 B0 26 00  
   316                   
-  317 FFC2:F2 BA 2A 58  		.BYTE $F2, $BA, $2A, $58, $F4, $FE, $E1, $FD
-  317      F4 FE E1 FD  
+  317 FFB2:36 5A 30 6E  		.BYTE $36, $5A, $30, $6E, $3C, $4D, $63, $38
+  317      3C 4D 63 38  
   317                   
-  318 FFCA:AC 7E 79     		.BYTE $AC, $7E, $79
+  318 FFBA:1B D4 1C 13  		.BYTE $1B, $D4, $1C, $13, $64, $89, $36, $4C
+  318      64 89 36 4C  
+  318                   
+  319 FFC2:F2 BA 2A 58  		.BYTE $F2, $BA, $2A, $58, $F4, $FE, $E1, $FD
+  319      F4 FE E1 FD  
   319                   
-  320                   
-  321 FFCD:             MikeyOffsets
-  322                   ; Mikey addresses to be initialized (add to Mikey rang
-  323 FFCD:90           		.BYTE $90	; SDONEACK
-  324 FFCE:92           		.BYTE $92	; DISPCTL
-  325 FFCF:95           		.BYTE $95	; DISPADRH
-  326 FFD0:94           		.BYTE $94	; DISPADRL
-  327 FFD1:93           		.BYTE $93	; PBCKUP
-  328 FFD2:09           		.BYTE $09	; TIM2CTLA
-  329 FFD3:08           		.BYTE $08	; TIM2BCKUP
-  330 FFD4:BF           		.BYTE $BF	; BLUEREDF
-  331 FFD5:AF           		.BYTE $AF	; GREENF
-  332 FFD6:B0           		.BYTE $B0	; BLUERED0
-  333 FFD7:A0           		.BYTE $A0	; GREEN0
-  334 FFD8:01           		.BYTE $01	; TIM0CTLA
-Epyx HandyAsm 1.12      mikey                           11-Apr-12509:20:07 Page    7
-                                                        09:20:07  
+  320 FFCA:AC 7E 79     		.BYTE $AC, $7E, $79
+  321                   
+  322                   
+  323 FFCD:             MikeyOffsets
+  324                   ; Mikey addresses to be initialized (add to Mikey rang
+  325 FFCD:90           		.BYTE $90	; SDONEACK
+  326 FFCE:92           		.BYTE $92	; DISPCTL
+  327 FFCF:95           		.BYTE $95	; DISPADRH
+  328 FFD0:94           		.BYTE $94	; DISPADRL
+  329 FFD1:93           		.BYTE $93	; PBCKUP
+  330 FFD2:09           		.BYTE $09	; TIM2CTLA
+  331 FFD3:08           		.BYTE $08	; TIM2BCKUP
+  332 FFD4:BF           		.BYTE $BF	; BLUEREDF
+  333 FFD5:AF           		.BYTE $AF	; GREENF
+  334 FFD6:B0           		.BYTE $B0	; BLUERED0
+Epyx HandyAsm 1.12      mikey.src                       14-Apr-12518:55:51 Page    7
+                                                        18:55:51  
 
-  335                   ;		.BYTE $00	; TIM0BCKUP
-  336                   
-  337                   ; Initialization values for Mikey addresses
-  338 FFD9:             MikeyValues
-  339 FFD9:00           		.BYTE $00	; Render sprite command (and also address 
-  340 FFDA:0D           		.BYTE $0D	; 4 bit color with video DMA enabled
-  341 FFDB:20           		.BYTE $20	; Video address at $2000
-  342 FFDC:00           		.BYTE $00	; Video address at $2000
-  343 FFDD:29           		.BYTE $29	; Magic P value for screen frequency
-  344 FFDE:1F           		.BYTE $1F	; Enable count and reload, linking
-  345 FFDF:68           		.BYTE $68	; 104 backup value for vertical scan timer
-  346 FFE0:3E           		.BYTE $3E	; Yellow
-  347 FFE1:0E           		.BYTE $0E	; Yellow
-  348 FFE2:00           		.BYTE $00	; Black
-  349 FFE3:00           		.BYTE $00	; Black	
-  350 FFE4:18           		.BYTE $18	; 2 microseconds timing for horizontal lin
-  351 FFE5:9E           		.BYTE $9E	; 158 backup value for horizontal line sca
-  352                   
-  353      000D         MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values t
+  335 FFD7:A0           		.BYTE $A0	; GREEN0
+  336 FFD8:01           		.BYTE $01	; TIM0CTLA
+  337                   ;		.BYTE $00	; TIM0BCKUP
+  338                   
+  339                   ; Initialization values for Mikey addresses
+  340 FFD9:             MikeyValues
+  341 FFD9:00           		.BYTE $00	; Render sprite command (and also address 
+  342 FFDA:0D           		.BYTE $0D	; 4 bit color with video DMA enabled
+  343 FFDB:20           		.BYTE $20	; Video address at $2000
+  344 FFDC:00           		.BYTE $00	; Video address at $2000
+  345 FFDD:29           		.BYTE $29	; Magic P value for screen frequency
+  346 FFDE:1F           		.BYTE $1F	; Enable count and reload, linking
+  347 FFDF:68           		.BYTE $68	; 104 backup value for vertical scan timer
+  348 FFE0:3E           		.BYTE $3E	; Yellow
+  349 FFE1:0E           		.BYTE $0E	; Yellow
+  350 FFE2:00           		.BYTE $00	; Black
+  351 FFE3:00           		.BYTE $00	; Black	
+  352 FFE4:18           		.BYTE $18	; 2 microseconds timing for horizontal lin
+  353 FFE5:9E           		.BYTE $9E	; 158 backup value for horizontal line sca
   354                   
-  355                   ; Suzy addresses to be initialized (add to Suzy range 
-  356 FFE6:             SuzyOffsets
-  357 FFE6:91           		.BYTE $91	; SPRGO
-  358 FFE7:11           		.BYTE $11	; SCBNEXTH
-  359 FFE8:10           		.BYTE $10	; SCBNEXTL
-  360 FFE9:09           		.BYTE $09	; VIDBASH
-  361 FFEA:08           		.BYTE $08	; VIDBASL
-  362 FFEB:06           		.BYTE $06	; VOFFL
-  363 FFEC:04           		.BYTE $04	; HOFFL
-  364 FFED:90           		.BYTE $90	; SUZYBUSEN
-  365 FFEE:92           		.BYTE $92	; SPRSYS
-  366                   
-  367                   ; Initialization values for Suzy addresses (see also $
-  368 FFEF:             SuzyValues
-  369 FFEF:01           		.BYTE $01	; Draw sprite (no everon detection)
-  370 FFF0:50           		.BYTE $50	; SCBNEXT = $5082
-  371 FFF1:82           		.BYTE $82	; 
-  372 FFF2:20           		.BYTE $20	; VIDBAS = $2000
-  373 FFF3:00           		.BYTE $00	; 
-  374 FFF4:00           		.BYTE $00	; VOFF = $0000
-  375 FFF5:00           		.BYTE $00	; HOFF = $0000
-  376 FFF6:01           		.BYTE $01	; Bus enabled
-  377 FFF7:00           		.BYTE $00	; Unsigned math, no accumulation, collissi
-  378                   
-  379      0009         SUZYVALS_COUNT	.EQ *-SuzyValues	; number of values to 
+  355      000D         MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values t
+  356                   
+  357                   ; Suzy addresses to be initialized (add to Suzy range 
+  358 FFE6:             SuzyOffsets
+  359 FFE6:91           		.BYTE $91	; SPRGO
+  360 FFE7:11           		.BYTE $11	; SCBNEXTH
+  361 FFE8:10           		.BYTE $10	; SCBNEXTL
+  362 FFE9:09           		.BYTE $09	; VIDBASH
+  363 FFEA:08           		.BYTE $08	; VIDBASL
+  364 FFEB:06           		.BYTE $06	; VOFFL
+  365 FFEC:04           		.BYTE $04	; HOFFL
+  366 FFED:90           		.BYTE $90	; SUZYBUSEN
+  367 FFEE:92           		.BYTE $92	; SPRSYS
+  368                   
+  369                   ; Initialization values for Suzy addresses (see also $
+  370 FFEF:             SuzyValues
+  371 FFEF:01           		.BYTE $01	; Draw sprite (no everon detection)
+  372 FFF0:50           		.BYTE $50	; SCBNEXT = $5082
+  373 FFF1:82           		.BYTE $82	; 
+  374 FFF2:20           		.BYTE $20	; VIDBAS = $2000
+  375 FFF3:00           		.BYTE $00	; 
+  376 FFF4:00           		.BYTE $00	; VOFF = $0000
+  377 FFF5:00           		.BYTE $00	; HOFF = $0000
+  378 FFF6:01           		.BYTE $01	; Bus enabled
+  379 FFF7:00           		.BYTE $00	; Unsigned math, no accumulation, collissi
   380                   
-  381                   ; Reserved registers
-  382 FFF8:00           		.BYTE $00	; Reserved
-  383 FFF9:80           		.BYTE $80	; MAPCTL value
-  384 FFFA:00 30        	 	.WORD $3000	; NMI vector
-  385 FFFC:80 FF        	 	.WORD $FF80	; Boot vector
-  386 FFFE:80 FF        		.WORD $FF80	; IRQ vector
-  387                   
-Epyx HandyAsm 1.12      Symbols                         11-Apr-12509:20:07 Page    8
-                                                        09:20:07  
+  381      0009         SUZYVALS_COUNT	.EQ *-SuzyValues	; number of values to 
+  382                   
+  383                   ; Reserved registers
+  384 FFF8:00           		.BYTE $00	; Reserved
+  385 FFF9:80           		.BYTE $80	; MAPCTL value
+  386 FFFA:00 30        	 	.WORD $3000	; NMI vector
+  387 FFFC:80 FF        	 	.WORD $FF80	; Boot vector
+  388 FFFE:80 FF        		.WORD $FF80	; IRQ vector
+  389                   
+Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:55:51 Page    8
+                                                        18:55:51  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -486,8 +488,8 @@ $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
 $FDAF GREENF                            $FC00 HARDWARE_START
 $FD00 HCOUNT                            $0020 HFLIP
-Epyx HandyAsm 1.12      Symbols                         11-Apr-12509:20:07 Page    9
-                                                        09:20:07  
+Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:55:51 Page    9
+                                                        18:55:51  
 
 $FC05 HOFFH                             $FC04 HOFFL
 $0001 HORIZONTAL_INT                    $FCC4 HOWIE
@@ -522,88 +524,88 @@ $FD9D MTEST1                            $FD9E MTEST2
 $FFCD MikeyOffsets                      $FFD9 MikeyValues
 $FF1E MontgomeryReduce                  $0004 NOEXP
 $0005 NONCOLL_SPRITE                    $0004 NORMAL_SPRITE
-$0020 NO_COLLIDE                        $0000 ONE_PER_PIXEL
-$0008 OPTION1_BUTTON                    $0004 OPTION2_BUTTON
-$0001 OUTER_BUTTON                      $0008 OVERRUN
-$0001 PARBIT                            $0010 PAREN
-$0010 PARERR                            $0001 PAREVEN
-$0001 PAUSE_SWITCH                      $FD93 PBKUP
-$0002 POWERON                           $FC2F PROCADRH
-$FC2E PROCADRL                          $FCB2 RCART_0
-$FCB3 RCART_1                           $0010 READ_ENABLE
-$0010 RELOAD_HV                         $0020 RELOAD_HVS
-$0030 RELOAD_HVST                       $0030 RELOAD_MASK
-$0000 RELOAD_NONE                       $0008 RESETERR
-$0040 RESET_DONE                        $0008 RESTART_BUTTON
-$0008 RESTLESS                          $0008 REUSE_PALETTE
-$0001 RIGHT0_SELECT                     $0002 RIGHT1_SELECT
-$0004 RIGHT2_SELECT                     $0008 RIGHT3_SELECT
-$000F RIGHT_ATTENMASK                   $0004 ROM_SPACE
-$FE4A RSA_LOAD                          $0002 RXBRK
-$0040 RXINTEN                           $0040 RXRDY
-$FE59 ReadBlock                         $FC2D SCBADRH
-$FC2C SCBADRL                           $FC11 SCBNEXTH
-$FC10 SCBNEXTL                          $FC23 SCVPOSH
-$FC22 SCVPOSL                           $FD90 SDONEACK
-$FD8C SERCTL                            $FD8D SERDAT
-$FD10 SERIALRATE                        $0010 SERIAL_INT
-$FE00 SETCARTBLOCK                      $0007 SHADOW_SPRITE
-Epyx HandyAsm 1.12      Symbols                         11-Apr-12509:20:07 Page   10
-                                                        09:20:07  
+$0020 NO_COLLIDE                        $513F OFFSET
+$0000 ONE_PER_PIXEL                     $0008 OPTION1_BUTTON
+$0004 OPTION2_BUTTON                    $0001 OUTER_BUTTON
+$0008 OVERRUN                           $0001 PARBIT
+$0010 PAREN                             $0010 PARERR
+$0001 PAREVEN                           $0001 PAUSE_SWITCH
+$FD93 PBKUP                             $0002 POWERON
+$FC2F PROCADRH                          $FC2E PROCADRL
+$FCB2 RCART_0                           $FCB3 RCART_1
+$0010 READ_ENABLE                       $0010 RELOAD_HV
+$0020 RELOAD_HVS                        $0030 RELOAD_HVST
+$0030 RELOAD_MASK                       $0000 RELOAD_NONE
+$0008 RESETERR                          $0040 RESET_DONE
+$0008 RESTART_BUTTON                    $0008 RESTLESS
+$0008 REUSE_PALETTE                     $0001 RIGHT0_SELECT
+$0002 RIGHT1_SELECT                     $0004 RIGHT2_SELECT
+$0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
+$0004 ROM_SPACE                         $FE4A RSA_LOAD
+$0002 RXBRK                             $0040 RXINTEN
+$0040 RXRDY                             $FE59 ReadBlock
+$FC2D SCBADRH                           $FC2C SCBADRL
+$FC11 SCBNEXTH                          $FC10 SCBNEXTL
+$FC23 SCVPOSH                           $FC22 SCVPOSL
+$FD90 SDONEACK                          $FD8C SERCTL
+$FD8D SERDAT                            $FD10 SERIALRATE
+$0010 SERIAL_INT                        $FE00 SETCARTBLOCK
+Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:55:51 Page   10
+                                                        18:55:51  
 
-$0080 SIGNMATH                          $0033 SIZEKEY
-$0004 SKIP_SPRITE                       $FC82 SPRCOLL
-$FC80 SPRCTL0                           $FC81 SPRCTL1
-$FC13 SPRDLINEH                         $FC12 SPRDLINEL
-$FC21 SPRDOFFH                          $FC20 SPRDOFFL
-$FC91 SPRGO                             $FC19 SPRHSIZH
-$FC18 SPRHSIZL                          $FC83 SPRINIT
-$0002 SPRITESTOP                        $0002 SPRITETOSTOP
-$0001 SPRITEWORKING                     $0001 SPRITE_GO
-$FC92 SPRSYS                            $FC1B SPRVSIZH
-$FC1A SPRVSIZL                          $FC1D STRETCHH
-$FC1C STRETCHL                          $FC90 SUZYBUSEN
-$FC88 SUZYHREV                          $FC89 SUZYSREV
-$0009 SUZYVALS_COUNT                    $FC00 SUZY_BASE
-$0001 SUZY_SPACE                        $FCB1 SWITCHES
-$FD87 SYSCTL1                           $FE00 SetCartBlock
-$FFE6 SuzyOffsets                       $FFEF SuzyValues
-$0080 THREE_PER_PIXEL                   $FC03 TILTACUMH
-$FC02 TILTACUML                         $FC1F TILTH
-$FC1E TILTL                             $FD00 TIMER0
-$0001 TIMER0_INT                        $FD04 TIMER1
-$0002 TIMER1_INT                        $FD08 TIMER2
-$0004 TIMER2_INT                        $FD0C TIMER3
-$0008 TIMER3_INT                        $FD10 TIMER4
-$FD14 TIMER5                            $0020 TIMER5_INT
-$FD18 TIMER6                            $0040 TIMER6_INT
-$FD1C TIMER7                            $0080 TIMER7_INT
-$0008 TIMER_DONE                        $0000 TIM_BACKUP
-$0001 TIM_CONTROLA                      $0003 TIM_CONTROLB
-$0002 TIM_COUNT                         $FC01 TMPADRH
-$FC00 TMPADRL                           $0080 TURBO_DISABLE
-$0040 TWO_PER_PIXEL                     $0002 TXBRK
-$0020 TXEMPTY                           $0080 TXINTEN
-$0004 TXOPEN                            $0080 TXRDY
-$0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
-$FD08 VCOUNT                            $0008 VECTOR_SPACE
-$0004 VERTICAL_INT                      $0010 VFLIP
-$FC0D VIDADRH                           $FC0C VIDADRL
-$FC09 VIDBASH                           $FC08 VIDBASL
-$FC07 VOFFH                             $FC06 VOFFL
-$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
-$FC27 VSIZACUMH                         $FC26 VSIZACUML
-$FC2B VSIZOFFH                          $FC2A VSIZOFFL
-$0010 VSTRETCH                          $0010 VSTRETCHING
-$5000 WORK_ORG                          $0006 XOR_SHADOW_SPRITE
-$0006 XOR_SPRITE                        $000B acc0
-$000D acc1                              $0008 bitcount
-$0009 bytecount                         $0002 checksum
-$FE34 copy                              $0000 dest
-$FF42 done                              $00AA encrypted_area
-$000F input1                            $00AA inputcode
-$FF9A modulus                           $0007 num_blocks
-$0003 powerdowncount                    $0005 ptr
-$FE9D retry                             $0011 scratch0
-$0044 scratch1                          $0077 scratch2
-$000A temp0                             
+$0007 SHADOW_SPRITE                     $0080 SIGNMATH
+$0033 SIZEKEY                           $0004 SKIP_SPRITE
+$FC82 SPRCOLL                           $FC80 SPRCTL0
+$FC81 SPRCTL1                           $FC13 SPRDLINEH
+$FC12 SPRDLINEL                         $FC21 SPRDOFFH
+$FC20 SPRDOFFL                          $FC91 SPRGO
+$FC19 SPRHSIZH                          $FC18 SPRHSIZL
+$FC83 SPRINIT                           $0002 SPRITESTOP
+$0002 SPRITETOSTOP                      $0001 SPRITEWORKING
+$0001 SPRITE_GO                         $FC92 SPRSYS
+$FC1B SPRVSIZH                          $FC1A SPRVSIZL
+$FC1D STRETCHH                          $FC1C STRETCHL
+$FC90 SUZYBUSEN                         $FC88 SUZYHREV
+$FC89 SUZYSREV                          $0009 SUZYVALS_COUNT
+$FC00 SUZY_BASE                         $0001 SUZY_SPACE
+$FCB1 SWITCHES                          $FD87 SYSCTL1
+$FE00 SetCartBlock                      $FFE6 SuzyOffsets
+$FFEF SuzyValues                        $0080 THREE_PER_PIXEL
+$FC03 TILTACUMH                         $FC02 TILTACUML
+$FC1F TILTH                             $FC1E TILTL
+$FD00 TIMER0                            $0001 TIMER0_INT
+$FD04 TIMER1                            $0002 TIMER1_INT
+$FD08 TIMER2                            $0004 TIMER2_INT
+$FD0C TIMER3                            $0008 TIMER3_INT
+$FD10 TIMER4                            $FD14 TIMER5
+$0020 TIMER5_INT                        $FD18 TIMER6
+$0040 TIMER6_INT                        $FD1C TIMER7
+$0080 TIMER7_INT                        $0008 TIMER_DONE
+$0000 TIM_BACKUP                        $0001 TIM_CONTROLA
+$0003 TIM_CONTROLB                      $0002 TIM_COUNT
+$FC01 TMPADRH                           $FC00 TMPADRL
+$0080 TURBO_DISABLE                     $0040 TWO_PER_PIXEL
+$0002 TXBRK                             $0020 TXEMPTY
+$0080 TXINTEN                           $0004 TXOPEN
+$0080 TXRDY                             $0004 UNSAFEACCESS
+$0004 UNSAFEACCESSRST                   $FD08 VCOUNT
+$0008 VECTOR_SPACE                      $0004 VERTICAL_INT
+$0010 VFLIP                             $FC0D VIDADRH
+$FC0C VIDADRL                           $FC09 VIDBASH
+$FC08 VIDBASL                           $FC07 VOFFH
+$FC06 VOFFL                             $FC17 VPOSSTRTH
+$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
+$FC26 VSIZACUML                         $FC2B VSIZOFFH
+$FC2A VSIZOFFL                          $0010 VSTRETCH
+$0010 VSTRETCHING                       $5000 WORK_ORG
+$0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
+$000B acc0                              $000D acc1
+$0008 bitcount                          $0009 bytecount
+$0002 checksum                          $FE34 copy
+$0000 dest                              $FF42 done
+$00AA encrypted_area                    $000F input1
+$00AA inputcode                         $FF9A modulus
+$0007 num_blocks                        $0003 powerdowncount
+$0005 ptr                               $FE9D retry
+$0011 scratch0                          $0044 scratch1
+$0077 scratch2                          $000A temp0

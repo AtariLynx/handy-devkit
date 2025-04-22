@@ -8,11 +8,20 @@
 	.LIST ON
 
 BASE_ORG	.EQ $2000
+LO			.EQ 0
+HI			.EQ 1
 
 * ===========================================================================
 
 		.ORG $0000
-ptr		.DS 2
+ptr				.DS 2
+Unknown1 		.DS 4
+CartPage		.DS 1	; $06
+CartOffsetLo	.DS 1	; $07
+CartOffsetHi	.DS 1	; $08
+Unknown2		.DS 1	; $09
+PageCount		.DS 1	; $0A
+CartSize		.DS 3	; $0B-$0C-$0D
 
 * ===========================================================================
 
@@ -32,33 +41,35 @@ ptr		.DS 2
 		STA IODIR
 		STA IODIR_RAM
 
-		JSR InitComm
-		JSR ReadByte	; Receive byte for 
-		STA $06
+		JSR NotifyHandyReset
+
+		JSR ReadByte	; Receive byte for cartridge page
+		STA CartPage
 		JSR ReadByte
-		STA $07
+		STA CartOffsetLo
 		JSR ReadByte
-		STA $08
+		STA CartOffsetHi
 		JSR ReadByte
-		STA $0B
+		STA CartSize
 		JSR ReadByte
-		STA $0C
+		STA CartSize+1
 		JSR ReadByte
-		STA $0D
+		STA CartSize+2
 		STA $09
+
 .3		LDA #$00
 		STA ptr
 		LDA #$22
 		STA ptr+1		; Store address $2200 at $0000
 
 		LDA #$10		; Read 16 pages into RAM
-		STA $0A
-.0		JSR ReadByte	; Read and echo byte from page 9 to 1
+		STA PageCount
+.0		JSR ReadByte	; Receive and echo byte from parallel port Amiga
 		STA (ptr)		; Store byte in ($0000) 
 		INC ptr
 		BNE .0
 		INC ptr+1
-		DEC $0A
+		DEC PageCount
 		BNE .0
 
 		LDA #$00
@@ -66,31 +77,31 @@ ptr		.DS 2
 		LDA #$22
 		STA ptr+1
 		LDA #$10		; Read another 16 pages
-		STA $0A
-.2		LDA $06
+		STA PageCount
+.2		LDA CartPage
 		JSR SetCartBlock2
 		LDA #RESTLESS
 		STA IODAT
 		LDX $09
 		LDY #$00
 .1		LDA (ptr),y
-		STA RCART_0
+		STA RCART_0		; Store data in Pinky ROM
 		INY
 		BNE .1
 		INC ptr+1
-		DEC $0A
+		DEC PageCount
 		DEX
 		BNE .1
-		INC $06
-		LDA $0A
+		INC CartPage
+		LDA PageCount
 		BNE .2
 		LDA #$1A
 		STA IODAT
-		LDA $06
-		BNE .3
-		BRK
+		LDA CartPage
+		BNE .3			; Repeat 
+		BRK				; Pause Mandy
 		NOP
-		JMP BASE_ORG
+		JMP BASE_ORG	; Start program if requested
 
 ; Read and echo byte from page 9 to 1
 ReadByte
@@ -118,7 +129,7 @@ EndUpload
 		JSR Write0Page6	; Write zero to page 6
 		JMP Write0Page3	; Write zero to page 3
 
-InitComm ; (Preserves A)
+NotifyHandyReset ; (Preserves A)
 		PHA
 .1		JSR ReadPage8	; Read a byte from page 8
 		AND #$40		; Check for bit 6
@@ -196,10 +207,10 @@ SetCartBlock1
 		SEC
 		ROL A
 .2		BCC .0
-		LDX $2179
+		LDX .fd
 		STX IODAT
 		BRA .1
-.0		LDX $217A
+.0		LDX .fe
 		STX IODAT
 .1		STY SYSCTL1
 		DEY
