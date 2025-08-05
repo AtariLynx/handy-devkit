@@ -1,0 +1,444 @@
+* ===========================================================================
+
+	.LIST OFF
+
+		.IN 6502:include/harddefs.i
+		.IN 6502:macros/sys.mac
+
+	.LIST ON
+
+* ===========================================================================
+
+ROM_HEADER_SIZE		.EQ		$019a
+LO					.EQ		0
+HI					.EQ		1
+
+ROMDIR_PAGE			.EQ		0
+ROMDIR_OFFSET		.EQ		1
+ROMDIR_FLAG			.EQ		3
+ROMDIR_DEST			.EQ		4
+ROMDIR_SIZE			.EQ		6
+ROMDIR_ENTRY_SIZE	.EQ		8
+
+BASE_ORG			.EQ 	$0200	; Start of program
+VIDEO_ORG			.EQ 	$0400	; Initial video buffer
+NMI_ORG				.EQ 	$3000	; NMI logic
+
+* ===========================================================================
+* ===                       =================================================
+* ===  Zero-Page Variables  =================================================
+* ===                       =================================================
+* ===========================================================================
+
+		.OR $0000
+
+ztemp1			.DS 1 ; $00
+ztemp2			.DS 1 ; $01
+dataptr			.DS 2 ; $02 $03
+sysptr			.DS 2 ; $04 $05
+CartPageSize	.DS 1 ; $06		Page size in multiples of 256 bytes 
+CartAddr		.DS 2 ; $07 $08
+CartOffsetLow	.DS 1 ; $09		Split up because original code optimized for 256 byte page size 
+CartOffsetHi	.DS 1 ; $0A		not requiring a second byte (and less code)
+CartPage		.DS 1 ; $0B
+CartIOCount		.DS 2 ; $0C $0D
+CartDirectory	.DS ROMDIR_ENTRY_SIZE ; Buffer for directory entry
+;ROMDIR_PAGE			$0E
+;ROMDIR_OFFSET			$0F $10
+;ROMDIR_FLAG			$11
+;ROMDIR_DEST			$12 $13
+;ROMDIR_SIZE			$14 $15
+
+* ===========================================================================
+
+		.OR BASE_ORG
+		.RU *
+
+		SEI
+
+; Initialize Mikey
+		LDX #MIKEYVALS_COUNT
+.0		LDA MikeyValues,x	; Initialization values
+		LDY MikeyOffsets,x	; Offsets from base value $FD00
+		STA MIKEY_BASE,y
+		DEX
+		BPL .0
+
+; Setup NMI interrupt address
+		LDA #VECTOR_SPACE
+		STA MAPCTL
+		STZ CPU_NMI+LO
+		LDA #>NMI_ORG
+		STA CPU_NMI+HI
+
+; Cartridge sizes can be 256 bytes (64KB), 512 (128KB), 1024 (256KB), 2048 (512KB) and 4096 (1MB) 
+; 020F
+DeterminePageSize
+		STZ CartPageSize
+		SEC
+.1		ROL CartPageSize	; Loop 1 bit from left to right 
+		JSR ReadPages
+		BCC .1				; Carry clear means not right block size
+
+		LDA #<ROM_HEADER_SIZE
+		STA CartAddr+LO		; Offset to directory after 410 byte encrypted header
+		LDA #>ROM_HEADER_SIZE
+		STA CartAddr+HI
+		JSR CheckFiles		; Sanity check for first two directory entries
+
+		BCS .4
+		STZ CartAddr+LO
+		LDA #$02
+		STA CartAddr+HI		; $0200 to dataptr
+
+.4		LDA #$00			; Read first file
+		JSR ReadFile
+		LDA CartDirectory+ROMDIR_DEST+LO
+		STA dataptr+LO		; Start of first file with palette and boot screen SCB
+		CLC
+		ADC #$20			; Locate end of color palette
+		STA SCBNEXTL		; Beginning of SCB definition 
+		LDA CartDirectory+ROMDIR_DEST+HI
+		STA dataptr+HI
+		ADC #$00			; Add any carry from low byte addition of color palette
+		STA SCBNEXTH
+		LDY #$1F
+.3		LDA (dataptr),y
+		STA GREEN0,y		; Green color map
+		DEY
+		BPL .3
+
+InitSuzy
+		LDX #SUZYVALS_COUNT
+.10		LDA SuzyValues,x
+		LDY SuzyOffsets,x
+		STA SUZY_BASE,y
+		DEX
+		BPL .10
+
+; Wait for longer time unless joystick or buttons are pressed
+		STZ CPUSLEEP
+		LDX #$20
+.13		LDA JOYSTICK
+		BNE .11
+.12		INC A
+		BNE .12
+		INY					; Y is #$2A after Suzy initialization
+		BNE .13
+		DEX
+		BNE .13
+.11		LDX #$1F			; Clear color map to black
+.14		STZ GREEN0,x
+		DEX
+		BPL .14
+		LDA #$01			; Load main file using second directory entry
+		JSR ReadFile		; $032E
+		.BY $13				; Trigger software break
+		JMP (CartDirectory+ROMDIR_DEST)
+
+; 0281
+ReadPages					; Reads first two pages of cartridge. Checks correct page size
+		LDA #$01			; Page 1
+		JSR ReadPage
+		BCC abort			; Abort reading
+		TXA					; Page 0
+;		BRA ReadPage		; Fall into ReadPage for second time
+
+; 0289
+; Reads and verifies pages from cartridge
+; Accumulator holds page number. 
+; If block loaded correctly returns with carry set and X zero, otherwise with carry clear
+ReadPage
+		JSR SetCartPage		; Select page number
+		LDA #$00			; Change branch to go to next instruction
+		JSR LoadVerifyPage	; $0294 First run AccessDir
+		CLC					; Carry flag becomes important
+		LDA #$0A			; Restore original branch offset (.21-branch)
+;		BRA LoadVerifyPage
+
+; 0294
+; Reads or verifies a page
+; A determines action: load: #$00, verify: #$0A
+; Returns carry set and X zero when loaded or verified 
+LoadVerifyPage
+		STA branch+1		; Self-modify code to make branch a NOP on first run
+		LDX CartPageSize	; Read CartPageSize times 256 bytes into $2400
+		LDA #$00			; Pointer to $2400
+		STA dataptr
+		LDA #$24
+		STA dataptr+1
+		LDY #$00
+.20		LDA RCART_0
+		CMP (dataptr),y
+		STA (dataptr),y
+
+branch	.= *
+		BNE verify_error	; On first pass this is essentially a NOP and comparison has no effect
+		INY
+		BNE .20
+		INC dataptr+1
+		DEX					; Next 256 bytes in this page
+		BNE .20
+		SEC					; Carry set conveys result of a match
+abort
+		RTS
+
+verify_error
+		CLC					; Carry clear means block was not loaded correctly (wrong page size)
+		RTS
+
+; Performs routine OpenFile potentially twice
+; 02B8
+CheckFiles
+		LDA #$00			; File number for boot screen
+		LDX #$DC			; Load address should be $2400 or higher, so high byte
+		JSR CheckFile		; is $100 - $24 is $DC to add actual 
+		BCC check_failed
+		LDA #$01			; File number for main file
+		LDX #$FC			; Load address is required to be $0400 or higher
+;		BRA CheckFile		; Fall through
+
+; Checks a file entry in directory and whether offset is valid
+; A holds file number and X minimum load address (minus high byte)
+; 02C5
+CheckFile
+		PHX
+		JSR OpenFile
+		PLA
+		CLC
+		ADC CartDirectory+ROMDIR_DEST+HI
+		BCC check_failed
+		LDA CartPageSize
+		CMP CartDirectory+ROMDIR_OFFSET+HI	; High byte of offset should never exceed page size 
+check_failed
+		RTS									; (expressed in blocks of 256 bytes)
+
+; Opens a file from a directory entry
+; A is file number, CartOffsetLow holds address of directory (at $019A)
+OpenFile
+; 02D4
+		LDX CartPageSize
+		DEX					; Determine mask for offset within page
+		STX ztemp2
+GetDirAddress
+		STZ ztemp1
+		ASL A
+		ROL ztemp1
+		ASL A
+		ROL ztemp1
+		ASL A				; File number times 8 (three shift lefts) for each directory entry
+		ROL ztemp1			; Second byte for file numbers higher than 32
+		ADC CartAddr+LO		; Calculate address of directory entry
+		TAX					; Store low byte of offset in X
+		LDA ztemp1		
+		ADC CartAddr+HI
+		PHA					; Push high byte of address
+		AND ztemp2			; Mask out any overflow to get page-relative address
+		TAY					; Store high byte of offset in Y
+		PLA					; Load high byte of address again
+.26
+		LSR ztemp2			; Determine page number by dividing by page size
+		BCC .30
+		LSR A
+		BRA .26
+
+;OpenFile0					; See also cart.src from 6502:src in Handy dev kit
+.30		JSR SetCartAddress
+		LDA #<{ROMDIR_ENTRY_SIZE+1}	; Add one to 
+		STA CartIOCount+LO
+		LDA #>{ROMDIR_ENTRY_SIZE+$100}
+		STA CartIOCount+HI
+		LDA #<CartDirectory			; Load directory entry bytes into buffer address in zero page 
+		STA sysptr+LO
+		LDA #>CartDirectory
+		STA sysptr+HI
+		JSR ReadCart0Grunt			; Read actual bytes from cartridge
+
+		LDA CartDirectory+ROMDIR_PAGE
+		LDX CartDirectory+ROMDIR_OFFSET+LO
+		LDY CartDirectory+ROMDIR_OFFSET+HI
+
+; Set cart offset into page
+SetCartAddress
+		STA CartPage
+		STX CartOffsetLow
+		STY CartOffsetHi
+		JSR SetCartPage
+;		BRA SetCartOffset
+
+SetCartOffset
+		LDY CartOffsetHi
+		LDX CartOffsetLow
+		INY					; Add one to allow counting to zero
+		INX					; Same
+		BRA .31
+.32		LDA RCART_0			; Dummy reads to advance ripple counter
+.31		DEX
+		BNE .32
+		DEY
+		BNE .32
+
+;		RESTORE_CART		; Unlike cart.src function does not restore cart registers
+		RTS
+
+; 032E
+; Reads file with number specified in A
+ReadFile
+		JSR OpenFile		; CartDirectory holds entry number from A
+		LDA CartDirectory+ROMDIR_SIZE+HI
+		INC A				; Add one to count down
+		STA CartIOCount+1
+		LDA CartDirectory+ROMDIR_SIZE+LO
+		INC A
+		STA CartIOCount
+		LDX CartDirectory+ROMDIR_DEST+LO
+		LDY CartDirectory+ROMDIR_DEST+HI
+		STX sysptr			; Set destination for data read from file
+		STY sysptr+1
+;		JMP ReadCart0Grunt	; Fall through to reading
+
+; 0343
+ReadCart0Grunt
+		LDA #RESTLESS
+		STA IODAT
+		LDX CartOffsetLow
+		SEC					; Set Y to complement of CartOffsetHigh
+		LDA CartOffsetHi	; to facilitate bounds checking
+		SBC CartPageSize
+		TAY
+.42		DEC CartIOCount		; Count down bytes to read
+		BEQ .40
+.41		LDA RCART_0			; Read and store byte
+		STA (sysptr)
+		INC sysptr
+		BEQ .44
+.43		INX					; Bump cart page counters
+		BNE .42
+		INY
+		BNE .42
+		INC CartPage		; Get next page from cartridge
+		LDA CartPage
+		JSR SetCartPage		; Select page number
+		LDX #$00			; Set count to read whole page
+		SEC
+		TXA
+		SBC CartPageSize
+		TAY
+		BRA .42
+.44		INC sysptr+1		; Not done frequently so pulled out of loop
+		BRA .43
+.40		DEC CartIOCount+1	; Check to see if load is finished
+		BNE .41				; If not, get back in there
+		STX CartOffsetLow	; ROMPAGESIZE is assumed to be multiple of 256
+		CLC					; Restore true offset value
+		TYA
+		ADC CartPageSize
+		STA CartOffsetHi
+
+		LDA #RESTLESS+CART_ADDR_DATA
+		STA IODAT
+		RTS
+
+; 0389
+SetCartPage
+		STA ztemp1	; Accumulator has block number
+		LDY #RESTLESS+CART_ADDR_DATA
+		LDA #RESTLESS
+		SEC
+		BRA .50
+.52		BCC .51
+		STY IODAT
+		CLC
+.51		INX				; POWERON+CART_ADDR_STROBE
+		STX SYSCTL1
+.50		LDX #POWERON	; Without CART_ADDR_STROBE
+		STX SYSCTL1
+		ROL ztemp1
+		STA IODAT
+		BNE .52
+		RTS
+
+; 03A9
+; Suzy initialization values
+SuzyValues
+		.BYTE SPRITE_GO
+		.BYTE >VIDEO_ORG	; VIDBAS at $0400
+		.BYTE <VIDEO_ORG
+		.BYTE $01			; Enable bus for Suzy
+		.BYTE NO_COLLIDE+LEFTHAND
+		.BYTE $00			; No horizontal and vertical offset
+		.BYTE $00
+;		.BYTE $91
+;		.BYTE $09
+
+; 03B0
+SuzyOffsets
+		.BYTE $91	; SPRGO
+		.BYTE $09	; VIDBASH
+		.BYTE $08	; VIDBASL
+		.BYTE $90	; SUZYBUSEN
+		.BYTE $92	; SPRSYS
+		.BYTE $04	; HOFFL
+		.BYTE $06	; VOFFL
+		.BYTE $28	; HSIZOFFL
+		.BYTE $2A	; VSIZOFFL
+
+SUZYVALS_COUNT	.EQ *-SuzyOffsets
+
+; 03B9
+
+; Initialization values for Mikey addresses
+MikeyValues
+		.BYTE $00	; Suzy done acknowledge
+		.BYTE DMA_ENABLE+DISP_FOURBIT+DISP_COLOR ; 4 bit color with video DMA enabled
+		.BYTE $04	; DISPADDR to $0400
+		.BYTE $00	;
+		.BYTE $FF	; Rest all interrupt bits
+		.BYTE AUD_1	; Nothing enabled for non-display counters
+		.BYTE AUD_1
+		.BYTE AUD_1
+		.BYTE AUD_1
+		.BYTE AUD_1
+		.BYTE AUD_1
+		.BYTE $29	; Magic P value for screen frequency
+		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_LINKING
+		.BYTE $68	; 104 backup value for vertical scan timer (== 102 vertical lines plus 2)
+		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_1 ; 2 microseconds timing for horizontal line
+		.BYTE $9E	; 158 backup value (plus zero and underflow) (160 pixel across)
+		.BYTE AUD_1	; Nothing enabled for all audio counters
+		.BYTE AUD_1	;
+		.BYTE AUD_1	;
+		.BYTE AUD_1	;
+		.BYTE CART_ADDR_DATA+RESTLESS ; Set to output
+		.BYTE CART_ADDR_DATA+RESTLESS
+		.BYTE TXOPEN
+
+MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values to INIT in loop
+
+; 03D0
+
+MikeyOffsets
+; Mikey addresses to be initialized (add to Mikey range offset $FD00)
+		.BYTE <SDONEACK
+		.BYTE <DISPCTL
+		.BYTE <DISPADRH
+		.BYTE <DISPADRL
+		.BYTE <INTRST
+		.BYTE <TIMER7+TIM_CONTROLA
+		.BYTE <TIMER6+TIM_CONTROLA
+		.BYTE <TIMER5+TIM_CONTROLA
+		.BYTE <TIMER4+TIM_CONTROLA
+		.BYTE <TIMER3+TIM_CONTROLA
+		.BYTE <TIMER1+TIM_CONTROLA
+		.BYTE <PBKUP
+		.BYTE <TIMER2+TIM_CONTROLA
+		.BYTE <TIMER2+TIM_BACKUP
+		.BYTE <TIMER0+TIM_CONTROLA
+		.BYTE <TIMER0+TIM_BACKUP
+		.BYTE <AUDIO0+AUD_CONTROL
+		.BYTE <AUDIO1+AUD_CONTROL
+		.BYTE <AUDIO2+AUD_CONTROL
+		.BYTE <AUDIO3+AUD_CONTROL
+		.BYTE <IODIR
+		.BYTE <IODAT
+		.BYTE <SERCTL
