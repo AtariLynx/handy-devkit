@@ -9,19 +9,25 @@
 
 * ===========================================================================
 
+; Compile for Pinky/Mandy with
+;	asm cartgo.src +L
+; Compile for Howard/Howdy with
+;	asm cartgo.src +L +Ohowardcartgo.bin +DHOWARD
+
 ROM_HEADER_SIZE		.EQ		$019a
 LO					.EQ		0
 HI					.EQ		1
 
-ROMDIR_PAGE			.EQU	0	; This field is required
-ROMDIR_OFFSET		.EQU	1	; This field is required
-ROMDIR_FLAG			.EQU	3
-ROMDIR_DEST			.EQU	4
-ROMDIR_SIZE			.EQU	6	; This field is required
-ROMDIR_ENTRY_SIZE	.EQU	8
+ROMDIR_PAGE			.EQ		0
+ROMDIR_OFFSET		.EQ		1
+ROMDIR_FLAG			.EQ		3
+ROMDIR_DEST			.EQ		4
+ROMDIR_SIZE			.EQ		6
+ROMDIR_ENTRY_SIZE	.EQ		8
 
-BASE_ORG	.EQ $0200			; Start of program
-VIDEO_ORG	.EQ $0400			; Initial video buffer
+BASE_ORG			.EQ 	$0200	; Start of program
+VIDEO_ORG			.EQ 	$0400	; Initial video buffer
+NMI_ORG				.EQ 	$3000	; NMI logic
 
 * ===========================================================================
 * ===                       =================================================
@@ -31,22 +37,22 @@ VIDEO_ORG	.EQ $0400			; Initial video buffer
 
 		.OR $0000
 
-ztemp1			.DS 1 ; 00
-ztemp2			.DS 1 ; 01
-dataptr			.DS 2 ; 02 03
-sysptr			.DS 2 ; 04 05
-CartPageSize	.DS 1 ; 06		Page size in multiples of 256 bytes 
-CartAddr		.DS 2 ; 07
-CartOffsetLow	.DS 1 ; 09		Split up because original code optimized for 256 byte page size 
-CartOffsetHi	.DS 1 ; 0A		not requiring a second byte (and less code)
-CartPage		.DS 1 ; 0B
-CartIOCount		.DS 2 ; 0C 0D
+ztemp1			.DS 1 ; $00
+ztemp2			.DS 1 ; $01
+dataptr			.DS 2 ; $02 $03
+sysptr			.DS 2 ; $04 $05
+CartPageSize	.DS 1 ; $06		Page size in multiples of 256 bytes 
+CartAddr		.DS 2 ; $07 $08
+CartOffsetLow	.DS 1 ; $09		Split up because original code optimized for 256 byte page size 
+CartOffsetHi	.DS 1 ; $0A		not requiring a second byte (and less code)
+CartPage		.DS 1 ; $0B
+CartIOCount		.DS 2 ; $0C $0D
 CartDirectory	.DS ROMDIR_ENTRY_SIZE ; Buffer for directory entry
-;ROMDIR_PAGE	$0E
-;ROMDIR_OFFSET	$0F $10
-;ROMDIR_FLAG	$11
-;ROMDIR_DEST	$12 $13
-;ROMDIR_SIZE	$14 $15
+;ROMDIR_PAGE			$0E
+;ROMDIR_OFFSET			$0F $10
+;ROMDIR_FLAG			$11
+;ROMDIR_DEST			$12 $13
+;ROMDIR_SIZE			$14 $15
 
 * ===========================================================================
 
@@ -62,6 +68,15 @@ CartDirectory	.DS ROMDIR_ENTRY_SIZE ; Buffer for directory entry
 		STA MIKEY_BASE,y
 		DEX
 		BPL .0
+
+#IFDEF HOWARD
+; Setup NMI interrupt address
+		LDA #VECTOR_SPACE
+		STA MAPCTL
+		STZ CPU_NMI+LO
+		LDA #>NMI_ORG
+		STA CPU_NMI+HI
+#ENDIF
 
 ; Cartridge sizes can be 256 (64KB), 512 bytes (128KB), 1024 (256KB), 2048 (512KB) and 4096 (1MB) 
 ; 020F
@@ -125,8 +140,12 @@ InitSuzy
 		BPL .14
 		LDA #$01			; Load main file using second directory entry
 		JSR ReadFile		; $032E
-		BRK					; Trigger both a software and hardware break
+#IFDEF HOWARD
+		.BY $13				; Trigger Howard software break
+#ELSE
+		BRK					; Trigger Pinky software break
 		NOP
+#ENDIF
 		JMP (CartDirectory+ROMDIR_DEST)
 
 ; 0281
