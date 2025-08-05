@@ -9,9 +9,9 @@
 
 * ===========================================================================
 
-HEADER_SIZE			.EQU	$019a
-LO					.EQU	0
-HI					.EQU	1
+ROM_HEADER_SIZE		.EQ		$019a
+LO					.EQ		0
+HI					.EQ		1
 
 ROMDIR_PAGE			.EQU	0	; This field is required
 ROMDIR_OFFSET		.EQU	1	; This field is required
@@ -34,7 +34,7 @@ VIDEO_ORG	.EQ $0400			; Initial video buffer
 ztemp1			.DS 1 ; 00
 ztemp2			.DS 1 ; 01
 dataptr			.DS 2 ; 02 03
-loadptr			.DS 2 ; 04 05 <-----| sysptr in cart.src
+sysptr			.DS 2 ; 04 05
 CartPageSize	.DS 1 ; 06		Page size in multiples of 256 bytes 
 CartAddr		.DS 2 ; 07
 CartOffsetLow	.DS 1 ; 09		Split up because original code optimized for 256 byte page size 
@@ -57,8 +57,8 @@ CartDirectory	.DS ROMDIR_ENTRY_SIZE ; Buffer for directory entry
 
 ; Initialize Mikey
 		LDX #MIKEYVALS_COUNT
-.0		LDA MikeyValues,x		; Initialization values
-		LDY MikeyOffsets,x		; Offsets from base value $FD00
+.0		LDA MikeyValues,x	; Initialization values
+		LDY MikeyOffsets,x	; Offsets from base value $FD00
 		STA MIKEY_BASE,y
 		DEX
 		BPL .0
@@ -69,38 +69,38 @@ DeterminePageSize
 		STZ CartPageSize
 		SEC
 .1		ROL CartPageSize	; Loop 1 bit from left to right 
-		JSR ReadPages		; $0281
+		JSR ReadPages
 		BCC .1				; Carry clear means not right block size
 
-		LDA #<HEADER_SIZE	; Offset to directory after 410 byte encrypted header
-		STA CartAddr+LO
-		LDA #>HEADER_SIZE
+		LDA #<ROM_HEADER_SIZE
+		STA CartAddr+LO		; Offset to directory after 410 byte encrypted header
+		LDA #>ROM_HEADER_SIZE
 		STA CartAddr+HI
 		JSR CheckFiles		; Sanity check for first two directory entries
 
 		BCS .4
-		STZ dataptr+LO
+		STZ CartAddr+LO
 		LDA #$02
-		STA dataptr+HI		; $0200 to dataptr
+		STA CartAddr+HI		; $0200 to dataptr
 
 .4		LDA #$00			; Read first file
 		JSR ReadFile
 		LDA CartDirectory+ROMDIR_DEST+LO
-		STA dataptr+LO
+		STA dataptr+LO		; Start of first file with palette and boot screen SCB
 		CLC
-		ADC #$20			; Start at end of color palette
-		STA SCBNEXTL
+		ADC #$20			; Locate end of color palette
+		STA SCBNEXTL		; Beginning of SCB definition 
 		LDA CartDirectory+ROMDIR_DEST+HI
 		STA dataptr+HI
-		ADC #$00
+		ADC #$00			; Add any carry from low byte addition of color palette
 		STA SCBNEXTH
 		LDY #$1F
 .3		LDA (dataptr),y
-		STA GREEN0,y	; Green color map
+		STA GREEN0,y		; Green color map
 		DEY
 		BPL .3
 
-InitSuzy ;
+InitSuzy
 		LDX #SUZYVALS_COUNT
 .10		LDA SuzyValues,x
 		LDY SuzyOffsets,x
@@ -115,33 +115,33 @@ InitSuzy ;
 		BNE .11
 .12		INC A
 		BNE .12
-		INY				; Y is #$2A after Suzy initialization
+		INY					; Y is #$2A after Suzy initialization
 		BNE .13
 		DEX
 		BNE .13
-.11		LDX #$1F		; Clear color map to black
+.11		LDX #$1F			; Clear color map to black
 .14		STZ GREEN0,x
 		DEX
 		BPL .14
-		LDA #$01		; Load main file using second directory entry
-		JSR ReadFile	; $032E
-		BRK				; Trigger both a software and hardware break
+		LDA #$01			; Load main file using second directory entry
+		JSR ReadFile		; $032E
+		BRK					; Trigger both a software and hardware break
 		NOP
 		JMP (CartDirectory+ROMDIR_DEST)
 
 ; 0281
-ReadPages				; Reads first two pages of cartridge. Checks correct page size
-		LDA #$01		; Page 1
+ReadPages					; Reads first two pages of cartridge. Checks correct page size
+		LDA #$01			; Page 1
 		JSR ReadPage
-		BCC .22			; Abort reading
-		TXA				; Page 0
-;		BRA ReadPage	; Fall into ReadPage for second time
+		BCC abort			; Abort reading
+		TXA					; Page 0
+;		BRA ReadPage		; Fall into ReadPage for second time
 
 ; 0289
 ; Reads and verifies pages from cartridge
 ; Accumulator holds page number. 
 ; If block loaded correctly returns with carry set and X zero, otherwise with carry clear
-ReadPage				
+ReadPage
 		JSR SetCartPage		; Select page number
 		LDA #$00			; Change branch to go to next instruction
 		JSR LoadVerifyPage	; $0294 First run AccessDir
@@ -166,16 +166,18 @@ LoadVerifyPage
 		STA (dataptr),y
 
 branch	.= *
-		BNE .21				; On first pass this is essentially a NOP and comparison has no effect
+		BNE verify_error	; On first pass this is essentially a NOP and comparison has no effect
 		INY
 		BNE .20
 		INC dataptr+1
 		DEX					; Next 256 bytes in this page
 		BNE .20
 		SEC					; Carry set conveys result of a match
-.22		RTS
+abort
+		RTS
 
-.21		CLC					; Carry clear means block was not loaded correctly (wrong page size)
+verify_error
+		CLC					; Carry clear means block was not loaded correctly (wrong page size)
 		RTS
 
 ; Performs routine OpenFile potentially twice
@@ -184,7 +186,7 @@ CheckFiles
 		LDA #$00			; File number for boot screen
 		LDX #$DC			; Load address should be $2400 or higher, so high byte
 		JSR CheckFile		; is $100 - $24 is $DC to add actual 
-		BCC .25
+		BCC check_failed
 		LDA #$01			; File number for main file
 		LDX #$FC			; Load address is required to be $0400 or higher
 ;		BRA CheckFile		; Fall through
@@ -198,17 +200,18 @@ CheckFile
 		PLA
 		CLC
 		ADC CartDirectory+ROMDIR_DEST+HI
-		BCC .25
+		BCC check_failed
 		LDA CartPageSize
 		CMP CartDirectory+ROMDIR_OFFSET+HI	; High byte of offset should never exceed page size 
-.25		RTS									; (expressed in blocks of 256 bytes)
+check_failed
+		RTS									; (expressed in blocks of 256 bytes)
 
 ; Opens a file from a directory entry
 ; A is file number, CartOffsetLow holds address of directory (at $019A)
 OpenFile
 ; 02D4
 		LDX CartPageSize
-		DEX				; Determine mask for offset within page
+		DEX					; Determine mask for offset within page
 		STX ztemp2
 GetDirAddress
 		STZ ztemp1
@@ -216,33 +219,33 @@ GetDirAddress
 		ROL ztemp1
 		ASL A
 		ROL ztemp1
-		ASL A			; File number times 8 (three shift lefts) for each directory entry
-		ROL ztemp1		; Second byte for file numbers higher than 32
-		ADC CartAddr+LO	; Calculate address of directory entry
-		TAX				; Store low byte of offset in X
+		ASL A				; File number times 8 (three shift lefts) for each directory entry
+		ROL ztemp1			; Second byte for file numbers higher than 32
+		ADC CartAddr+LO		; Calculate address of directory entry
+		TAX					; Store low byte of offset in X
 		LDA ztemp1		
 		ADC CartAddr+HI
-		PHA				; Push high byte of address
-		AND ztemp2		; Mask out any overflow to get page-relative address
-		TAY				; Store high byte of offset in Y
-		PLA				; Load high byte of address again
+		PHA					; Push high byte of address
+		AND ztemp2			; Mask out any overflow to get page-relative address
+		TAY					; Store high byte of offset in Y
+		PLA					; Load high byte of address again
 .26
-		LSR ztemp2		; Determine page number by dividing by page size
+		LSR ztemp2			; Determine page number by dividing by page size
 		BCC .30
 		LSR A
 		BRA .26
 
-OpenFile0				; See also cart.src from 6502:src in Handy dev kit
+;OpenFile0					; See also cart.src from 6502:src in Handy dev kit
 .30		JSR SetCartAddress
 		LDA #<{ROMDIR_ENTRY_SIZE+1}	; Add one to 
 		STA CartIOCount+LO
-		LDA #<{ROMDIR_ENTRY_SIZE+$100}
+		LDA #>{ROMDIR_ENTRY_SIZE+$100}
 		STA CartIOCount+HI
-		LDA #<CartDirectory			; Load 
-		STA loadptr+LO
+		LDA #<CartDirectory			; Load directory entry bytes into buffer address in zero page 
+		STA sysptr+LO
 		LDA #>CartDirectory
-		STA loadptr+HI
-		JSR ReadCart0Grunt			; Read 
+		STA sysptr+HI
+		JSR ReadCart0Grunt			; Read actual bytes from cartridge
 
 		LDA CartDirectory+ROMDIR_PAGE
 		LDX CartDirectory+ROMDIR_OFFSET+LO
@@ -276,56 +279,56 @@ SetCartOffset
 ReadFile
 		JSR OpenFile		; CartDirectory holds entry number from A
 		LDA CartDirectory+ROMDIR_SIZE+HI
-		INC A				;	Add one to count down
+		INC A				; Add one to count down
 		STA CartIOCount+1
 		LDA CartDirectory+ROMDIR_SIZE+LO
 		INC A
 		STA CartIOCount
 		LDX CartDirectory+ROMDIR_DEST+LO
 		LDY CartDirectory+ROMDIR_DEST+HI
-		STX loadptr			; Set destination for data read from file
-		STY loadptr+1
-;		JMP ReadCart0Grunt
+		STX sysptr			; Set destination for data read from file
+		STY sysptr+1
+;		JMP ReadCart0Grunt	; Fall through to reading
 
 ; 0343
 ReadCart0Grunt
 		LDA #RESTLESS
 		STA IODAT
-		LDX CartOffset+LO
-		SEC
-		LDA CartOffset+HI
+		LDX CartOffsetLow
+		SEC					; Set Y to complement of CartOffsetHigh
+		LDA CartOffsetHi	; to facilitate bounds checking
 		SBC CartPageSize
 		TAY
-.42		DEC CartIOCount			; Count down bytes to read
+.42		DEC CartIOCount		; Count down bytes to read
 		BEQ .40
-.41		LDA RCART_0				; Read and store byte
-		STA (loadptr)
-		INC loadptr
+.41		LDA RCART_0			; Read and store byte
+		STA (sysptr)
+		INC sysptr
 		BEQ .44
-.43		INX						; Bump cart page counters
+.43		INX					; Bump cart page counters
 		BNE .42
 		INY
 		BNE .42
-		INC CartPage			; Get next page from cartridge
+		INC CartPage		; Get next page from cartridge
 		LDA CartPage
-		JSR SetCartPage			; Select page number
-		LDX #$00				; Read entire page
+		JSR SetCartPage		; Select page number
+		LDX #$00			; Set count to read whole page
 		SEC
 		TXA
-		SBC CartPageSize		; $06
+		SBC CartPageSize
 		TAY
 		BRA .42
-.44		INC loadptr+1
+.44		INC sysptr+1		; Not done frequently so pulled out of loop
 		BRA .43
-.40		DEC CartIOCount+1		; $0D
-		BNE .41
-		STX CartOffsetLow		; $09
-		CLC
+.40		DEC CartIOCount+1	; Check to see if load is finished
+		BNE .41				; If not, get back in there
+		STX CartOffsetLow	; ROMPAGESIZE is assumed to be multiple of 256
+		CLC					; Restore true offset value
 		TYA
 		ADC CartPageSize
 		STA CartOffsetHi
 
-		LDA #RESTLESS+CART_ADDR_DATA	; Restore cartridge
+		LDA #RESTLESS+CART_ADDR_DATA
 		STA IODAT
 		RTS
 
