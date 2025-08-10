@@ -1,0 +1,605 @@
+* ===========================================================================
+
+	.LIST OFF
+
+		.IN 6502:include/harddefs.i
+		.IN 6502:include/cart.i
+		.IN 6502:include/monitor.i
+		.IN 6502:macros/zpage.mac
+
+	.LIST ON
+
+LO				.EQ 0
+HI				.EQ 1
+
+;NEXTZPG			.= $00
+
+	BEGIN_ZPAGE
+
+dest		.DS 2	; 00-01
+dest_old	.DS 2	; 02-03
+
+	END_ZPAGE
+
+BASE_ORG		.EQ $0200
+NMI_ORG			.EQ $3000
+
+		.ORG BASE_ORG
+
+Unknown		.DS 1
+RunAddr		.DS 2
+SaveA		.DS 1	; $0203
+SaveX		.DS 1	; $0204
+SaveY		.DS 1	; $0205
+SaveSP		.DS 1	; $0206
+SavePCHi	.DS 1	; $0207
+SavePCLo	.DS 1	; $0208
+SavePS		.DS 1	; $0209
+
+* ===========================================================================
+
+		.ORG NMI_ORG
+		.RUN *
+
+NmiHandler	; $3000
+		CLD
+		STA SaveA 			; Store accumulator, X and Y register for transfer
+		STX SaveX
+		STY SaveY
+		PLA 				; Get PC, ReturnHi, ReturnLo from stack
+		PLX
+		PLY
+		STA SavePS			; Store for inspection
+		STX SavePCHi
+		STY SavePCLo
+		TSX					; Store stack pointer 
+		STX SaveSP
+
+; Silence all audio channels	$301A
+		STZ AUDIO0+AUD_VOLCNTRL
+		STZ AUDIO1+AUD_VOLCNTRL
+		STZ AUDIO2+AUD_VOLCNTRL
+		STZ AUDIO3+AUD_VOLCNTRL
+
+; $3026
+		JSR InitComm		; $32C7
+
+Main	; $3029
+		JSR ReadByte		; Read byte from parallel port
+; 		JSR $3295
+
+		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "Download"
+		BNE .2	
+		JSR Download		; Control loop for downloading files from Pinky to Mandy
+		BRA Main			; Next command
+
+; $3035
+.2		CMP #UPLOAD_REQUEST	; Control command: 02 means "Upload"
+		BNE .5
+		JSR Upload			; Control loop for uploading data from Mandy to Pinky
+;		JSR $3150
+		BRA Main
+;		JMP Main			; Next command
+
+.5		CMP #GO_REQUEST		; Control command: 05 means "Go"
+		BNE .3				; Check whether to return from NMI
+		LDA #TXOPEN			; Turn off serial IRQs before starting
+		STA SERCTL			; and make sure serial port is open-collector
+		BRA .9
+
+; $3049
+.3		CMP #CONTINUE_REQUEST
+		BNE .4
+
+; Restore all previous values and return from NMI handler
+.9		LDX SaveSP		; Restore stack pointer
+		TXS
+		LDA SavePCLo	.DS 1	; $0208
+		PHA
+		LDA SavePCHi	.DS 1	; $0207
+		PHA
+		LDA SavePS		.DS 1	; $0209
+		PHA
+		LDA SaveA		; Load stored values for A, X, Y 
+		LDX SaveX
+		LDY SaveY
+		RTI
+
+; $3067
+.4		CMP #SLAVE_REQUEST
+		BNE .6
+		JSR BeginUpload	; $32A9
+		LDA #$00
+		JSR WriteByte	; Zero (A) to page 1 $329E
+		JSR EndUpload	; $32b9
+		JMP Main		; Next control command
+
+; $3079
+.6		CMP #SEE_HOWARD_REQUEST
+		BNE $3088
+		LDA #$01
+		STA $0220
+		STZ $15E0
+		JMP Main
+
+; #3088
+.7		CMP #HIDE_HOWARD_REQUEST
+		BNE .8
+		STZ $0220
+		JMP Main
+
+; $3092
+.8		JMP Main		; Next control command
+
+; Control loop for downloading bin from Howard to Howdy
+Download
+
+; $3095
+		JSR ReadByte	; $3295
+
+; $3098
+		CMP #END_OF_FILE ; End of .bin file
+		BNE .11			; $309F
+		JMP Done		; $314F
+
+; $309F
+.11		CMP #ORIGIN		; Receive load address (1)
+		BNE .12			; $30AC
+		JSR ReadAddress ; Read address from parallel port to X and A
+		STX dest
+		STA dest+1
+		BRA Download	; $3095
+
+; $30AC
+.12		CMP #DATA		; Load data of max 1-255 bytes (2)
+		BNE $30BC
+		JSR ReadByte	; Read byte from parallel port 
+		JSR ReadByte	; and another one, discarding first (potentially unused checksum)
+		TAY
+		JSR ReadRange	; Read Y number of bytes and store in ($F8) ; $31CB
+		BRA Download
+
+.13		CMP #RUN_ADDRESS	; Receive run address (3)
+		BNE .14			; $30CB
+		JSR ReadAddress ; Read two bytes to X and A $31C4
+		STX RunAddr		; Store in a special place $0201
+		STA RunAddr+1	; $0202
+		BRA Download
+
+; 30CB
+.14		CMP #REGISTER	; Read registers from Amiga/PC
+		BNE .15			; 30DE
+		LDA #<SaveA		; #$03 Store $0203 as address in $00, $01
+		STA dest
+		LDA #>SaveA		; #$02
+		STA dest+1
+		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
+		JSR $31EB		; ReadRange?
+		BRA Download
+
+.15		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
+		BNE .27			; $311E
+		JSR ReadByte	; Read fill value $3295
+		PHA
+		JSR ReadAddress	; Read destination address $31c4
+		STX dest
+		STA dest+1
+		JSR ReadByte	; Read count #3295
+		TAY
+		LDA $0220
+		BNE $310F
+		JSR $3278
+		PLA
+; $30FA
+.20		STA (dest_old)		; Store at address in ($02)
+		INC dest_old
+		BNE .21
+		STZ dest
+		INC dest+1
+		PHA
+; $3105
+		JSR $3278
+		PLA
+; $3109
+.21		DEY
+		BNE .20			; $30FA
+		JMP Download
+
+; $310F
+		PLA
+; $3110
+.23
+		STA (dest)
+		INC dest
+		BNE .22 		; $3118
+		INC dest+1
+
+.22		DEY
+		BNE .23 		; #3110
+		JMP Download
+
+; $311E
+.27
+		CMP #BUS_MONITOR
+		BNE .24			; $3132
+		LDA #$0A
+		STA dest
+		LDA #$02
+		STA dest+1
+		LDY #$10
+		JSR $31EB
+		JMP Download
+
+; $3132
+.24		CMP #LARGE_DATA
+		BNE .25			; $313F
+		JSR $31C4
+		JSR $31FA
+		JMP Download
+
+; 313F
+.25		CMP #ROM
+		BNE .26			; $314C
+		JSR $32F9
+		JSR $335C
+		JMP Download
+; $314C
+.26
+		JMP Download
+; $314F
+Done
+		RTS
+
+; $3150
+Upload
+.30		JSR $3295
+		CMP #$00
+		BNE $315A
+		JMP $31C3
+
+; $315A
+.31		CMP #$01
+		BNE .32			; $3167
+		JSR $31C4
+		STX dest
+		STA dest+1
+		BRA .30			; $3150
+
+; $3167
+.32		CMP #$02
+		BNE .33			; $3191
+		JSR $3295
+		TAY
+		LDA dest
+		STA $04
+		LDA dest+1
+		STA $05
+		JSR $32A9
+		LDA #$02
+		JSR $329E
+		LDA $021E
+		JSR $329E
+		TYA
+		JSR $329E
+		JSR $3239	
+		JSR $32B9
+		BRA .30
+
+; $3191
+.33		CMP #$10
+		BNE .34			; $31AF
+		LDA #$03
+		STA dest
+		LDA #$02
+		STA dest+1
+		LDY #$07
+		JSR $32A9
+		LDA #$10
+		JSR $329E
+		JSR $325A
+		JSR $32B9
+		BRA .30
+
+; $31AF
+.34		CMP #TRACE		; #$14
+		BNE .35			; $31B5
+		BRA .30
+
+; $31B5
+.35		CMP #$1A
+		BNE .36			; $31C1
+		JSR $32F9
+		JSR $337C
+		BRA .30
+
+; $31C1
+.36
+		BRA .30
+
+; $31C3
+		RTS 
+
+; $31C4
+ReadAddress
+		JSR $3295
+		TAX
+		JMP $3295
+
+; $31CB
+ReadRange
+		LDA $0220
+		BNE $31EB
+		JSR $3278
+; $31D3
+.38
+		JSR $3295
+		STA ($02)
+		INC $02
+		BNE .37			; $31E3
+		STZ dest
+		INC dest+1
+		JSR $3278
+
+; $31E3
+.37		DEY
+		BNE .38			; $31D3
+		LDA $02
+		STA $00
+		RTS
+
+; $31EB
+.39		JSR $3295
+		STA ($00)
+		INC dest
+		BNE .3A			; $31F6
+		INC dest+1
+; $31F6
+.3A		DEY
+		BNE .39			; $31EB
+		RTS
+
+; $31FA
+		LDY $0220
+		BNE .43			; $3222
+		TAY
+; $3200
+		TXA
+		BEQ .40			; $3204
+		INY
+
+; $3204
+.40		JSR $3278
+.41		JSR $3295
+		STA ($02)
+		INC $02
+		BNE .42			; $3217
+		STZ $00
+		INC $01
+		JSR $3278
+; $3217
+.42		DEX
+		BNE .41			; $3207
+		DEY
+		BNE .41			; $3207
+		LDA $02
+		STA $00
+		RTS
+
+; $3222
+.43		TAY
+		TXA
+		BEQ .44			; $3227
+		INY
+; $3227
+.44
+		JSR $3295
+		STA (dest)
+		INC dest
+		BNE $3232
+		INC dest+1
+
+; $3232
+.45		DEX
+		BNE .44			; $3227
+		DEY
+		BNE .44			; $3227
+		RTS
+
+; $3239
+		LDA $0220
+		BNE $325A
+		JSR $3278
+		JSR $32E3
+		JSR $329E
+		INC $02
+		BNE $3252
+		STZ dest
+		INC dest+1
+		JSR $3278
+		DEY
+		BNE $3241
+		LDA $02
+		STA dest
+		RTS
+
+; $325A
+		LDA dest
+		STA $02
+		LDA dest+1
+		STA $03
+		JSR $32E3
+		JSR $329E
+		INC $02
+		BNE $3270
+
+		INC $03
+		INC dest+1
+; $3270
+		DEY
+		BNE $3262
+		LDA $02
+		STA dest
+		RTS
+
+; $3278
+		LDA dest
+		STA $02
+		LDA dest+1
+		BMI $3292
+		CMP #$40
+		BCS $328F
+		PHY
+		LDY #$01
+		STY $15E0
+		PLY
+		ORA #$40
+		BRA $3292
+		STZ $15E0
+		STA $03
+		RTS
+
+; $3295
+ReadByte
+		LDA $1580
+		BPL $3295
+		LDA $1581
+		RTS
+
+; $329E
+WriteByte
+		PHA
+		LDA $1580
+		BPL $329F
+		PLA
+		STA $1581
+		RTS
+
+; $32A9
+BeginUpload
+		LDA $1580
+		AND #$40
+		BEQ $32A9
+		STZ $1582
+		LDA #$80
+		STA $1583
+		RTS
+
+; $32B9
+EndUpload
+		LDA $1580
+		BPL $32B9
+		LDA #$80
+		STA $1582
+		STZ $1583
+		RTS
+
+; $32C7
+InitComm
+		PHA
+		LDA $1580
+		AND #$40
+		BNE $32C8
+		LDA #$80
+		STA $1582
+		STA $1583
+; $32D7
+		LDA $1580
+		AND #$40
+		BEQ $32D7
+		STZ $1583
+		PLA
+		RTS
+
+; $32E3
+		LDA $0200
+		BNE $32F6
+		LDA $03
+		CMP #$FC
+		BNE $32F6
+		LDA $02
+		BPL $32F8
+		CMP #$84
+		BCC $32F8
+		LDA ($02)
+		RTS
+
+; $32F9
+		JSR $31C4
+		STX $15D0
+		STA $15D1
+		JSR $3295
+		STA $15D2
+		JSR $3295
+		EOR #$FF
+		STA $0221
+		JSR $3295
+		EOR #$FF
+		STA $0222
+		JSR $3295
+		EOR #$FF
+		STA $0223
+		JSR $3295
+		TAX
+		BMI $3335
+		AND #$07
+		STA $0224
+		LDA #$00
+		STA $04
+		LDA #$10
+		STA $05
+		BRA $3342
+		AND #$07
+		STA $0225
+		LDA #$01
+		STA $04
+		LDA #$10
+		STA $05
+		LDA $0224
+		AND #$07
+		STA $0227
+		LDA $0225
+		AND #$07
+; $334F
+		ASL
+		ASL
+		ASL
+		ORA $0227
+		STA $15D3
+		STA $0226
+		RTS
+
+; $335C
+		STZ $15D3
+; $335F
+		INC $0221
+		BNE $3375
+		INC $0222
+		BNE $3375
+		INC $0223
+		BNE $3375
+		LDA $0226
+		STA $15D3
+		RTS
+
+; $3375
+		JSR $3295
+		STA ($04)
+		BRA $335F
+		JSR $32A9
+		LDA $0220
+		BNE $3387
+		STZ $15D3
+		INC $0221
+		BNE $33A0
+		INC $0222
+		BNE $33A0
+		INC $0223
+		BNE $33A0
+		LDA $0226
+		STA $15D3
+		JSR $32B9
+		RTS
+
+		LDA ($04)
+		JSR $329E
+		BRA $3387
