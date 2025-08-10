@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      cartload                        14-Apr-12518:46:26 Page    1
-                                                        18:46:26  
+Epyx HandyAsm 1.12      cartload.src                    09-Aug-12517:33:42 Page    1
+                                                        17:33:42  
 
     1                   * ====================================================
     2                   
@@ -7,23 +7,32 @@
     8                   	.LIST ON
     9                   
    10      2000         BASE_ORG	.EQ $2000
-   11                   
-   12                   * ====================================================
+   11      0000         LO			.EQ 0
+   12      0001         HI			.EQ 1
    13                   
-   14 FFFE:             		.ORG $0000
-   15 0000:             ptr		.DS 2
-   16                   
-   17                   * ====================================================
-   18                   
-   19 0002:             		.ORG BASE_ORG
-   20                   		.RUN *
-   21                   
-   22 2000:78           		SEI
-   23 2001:D8           		CLD
-   24 2002:A2 FF        		LDX #$FF
-   25 2004:9A           		TXS
-   26                   
-   27                   		INITSYS
+   14                   * ====================================================
+   15                   
+   16 FFFE:             		.ORG $0000
+   17 0000:             sysptr			.DS 2
+   18 0002:             Unused	 		.DS 4
+   19 0006:             CartPage		.DS 1	; $06
+   20 0007:             CartOffsetLo	.DS 1	; $07
+   21 0008:             CartOffsetHi	.DS 1	; $08
+   22 0009:             Unknown2		.DS 1	; $09
+   23 000A:             PageCount		.DS 1	; $0A
+   24 000B:             CartSize		.DS 3	; $0B-$0C-$0D
+   25                   
+   26                   * ====================================================
+   27                   
+   28 000E:             		.ORG BASE_ORG
+   29                   		.RUN *
+   30                   
+   31 2000:78           		SEI
+   32 2001:D8           		CLD
+   33 2002:A2 FF        		LDX #$FF
+   34 2004:9A           		TXS
+   35                   
+   36                   		INITSYS
     1 2005:A9 0D      + 	LDA #DISP_COLOR+DISP_FOURBIT+DMA_ENABLE
     2 2007:8D ** **   + 	STA DISPCTL_RAM
     3 200A:A9 08      + 	LDA #LEFTHAND		
@@ -44,236 +53,252 @@
    19      FALSE        	  #IFDEF AUTO_TIMEOUT_USER
    22                 + 	  #ENDIF
    23                 + 
-   28                   
-   29 202A:A9 1A        		LDA #AUDIN_BIT+RESTLESS+CART_ADDR_DATA
-   30 202C:8D 8B FD     		STA IODAT
-   31 202F:8D ** **     		STA IODAT_RAM
-   32 2032:8D 8A FD     		STA IODIR
-   33 2035:8D ** **     		STA IODIR_RAM
-   34                   
-   35 2038:20 ** **     		JSR InitComm
-   36 203B:20 ** **     		JSR ReadByte	; Receive byte for 
-   37 203E:85 06        		STA $06
-   38 2040:20 ** **     		JSR ReadByte
-   39 2043:85 07        		STA $07
-   40 2045:20 ** **     		JSR ReadByte
-   41 2048:85 08        		STA $08
-   42 204A:20 ** **     		JSR ReadByte
-Epyx HandyAsm 1.12      cartload                        14-Apr-12518:46:26 Page    2
-                                                        18:46:26  
+   37                   
+   38 202A:A9 1A        		LDA #AUDIN_BIT+RESTLESS+CART_ADDR_DATA
+   39 202C:8D 8B FD     		STA IODAT
+   40 202F:8D ** **     		STA IODAT_RAM
+   41 2032:8D 8A FD     		STA IODIR
+   42 2035:8D ** **     		STA IODIR_RAM
+Epyx HandyAsm 1.12      cartload.src                    09-Aug-12517:33:42 Page    2
+                                                        17:33:42  
 
-   43 204D:85 0B        		STA $0B
-   44 204F:20 ** **     		JSR ReadByte
-   45 2052:85 0C        		STA $0C
-   46 2054:20 ** **     		JSR ReadByte
-   47 2057:85 0D        		STA $0D
-   48 2059:85 09        		STA $09
-   49 205B:A9 00        .3		LDA #$00
-   50 205D:85 00        		STA ptr
-   51 205F:A9 22        		LDA #$22
-   52 2061:85 01        		STA ptr+1		; Store address $2200 at $0000
+   43                   
+   44 2038:20 ** **     		JSR NotifyHandyReset
+   45                   
+   46                   ; Receive cartridge destination address
+   47 203B:20 ** **     		JSR ReadByte	; Receive byte for cartridge page
+   48 203E:85 06        		STA CartPage
+   49 2040:20 ** **     		JSR ReadByte
+   50 2043:85 07        		STA CartOffsetLo
+   51 2045:20 ** **     		JSR ReadByte
+   52 2048:85 08        		STA CartOffsetHi
    53                   
-   54 2063:A9 10        		LDA #$10		; Read 16 pages into RAM
-   55 2065:85 0A        		STA $0A
-   56 2067:20 ** **     .0		JSR ReadByte	; Read and echo byte from page 9 to 1
-   57 206A:92 00        		STA (ptr)		; Store byte in ($0000) 
-   58 206C:E6 00        		INC ptr
-   59 206E:D0 F7        		BNE .0
-   60 2070:E6 01        		INC ptr+1
-   61 2072:C6 0A        		DEC $0A
-   62 2074:D0 F1        		BNE .0
-   63                   
-   64 2076:A9 00        		LDA #$00
-   65 2078:85 00        		STA ptr
-   66 207A:A9 22        		LDA #$22
-   67 207C:85 01        		STA ptr+1
-   68 207E:A9 10        		LDA #$10		; Read another 16 pages
-   69 2080:85 0A        		STA $0A
-   70 2082:A5 06        .2		LDA $06
-   71 2084:20 ** **     		JSR SetCartBlock2
-   72 2087:A9 08        		LDA #RESTLESS
-   73 2089:8D 8B FD     		STA IODAT
-   74 208C:A6 09        		LDX $09
-   75 208E:A0 00        		LDY #$00
-   76 2090:B1 00        .1		LDA (ptr),y
-   77 2092:8D B2 FC     		STA RCART_0
-   78 2095:C8           		INY
-   79 2096:D0 F8        		BNE .1
-   80 2098:E6 01        		INC ptr+1
-   81 209A:C6 0A        		DEC $0A
-   82 209C:CA           		DEX
-   83 209D:D0 F1        		BNE .1
-   84 209F:E6 06        		INC $06
-   85 20A1:A5 0A        		LDA $0A
-   86 20A3:D0 DD        		BNE .2
-   87 20A5:A9 1A        		LDA #$1A
-   88 20A7:8D 8B FD     		STA IODAT
-   89 20AA:A5 06        		LDA $06
-   90 20AC:D0 AD        		BNE .3
-   91 20AE:00           		BRK
-   92 20AF:EA           		NOP
-   93 20B0:4C 00 20     		JMP BASE_ORG
-   94                   
-   95                   ; Read and echo byte from page 9 to 1
-   96 20B3:             ReadByte
-   97 20B3:20 ** **     		JSR ReadPage8	; Read a byte from page 8
-   98 20B6:10 FB        		BPL ReadByte	; Wait for strobe on bit 7
-   99 20B8:4C ** **     		JMP ReadPage9	; Read from page 9 data
-  100 20BB:48           		PHA
-  101 20BC:20 ** **     .3		JSR ReadPage8	; Read byte from page 8
-Epyx HandyAsm 1.12      cartload                        14-Apr-12518:46:26 Page    3
-                                                        18:46:26  
+   54                   ; Receive 24-bits cartridge size
+   55 204A:20 ** **     		JSR ReadByte
+   56 204D:85 0B        		STA CartSize
+   57 204F:20 ** **     		JSR ReadByte
+   58 2052:85 0C        		STA CartSize+1
+   59 2054:20 ** **     		JSR ReadByte
+   60 2057:85 0D        		STA CartSize+2
+   61 2059:85 09        		STA Unknown2
+   62                   
+   63 205B:A9 00        .3		LDA #$00
+   64 205D:85 00        		STA sysptr
+   65 205F:A9 22        		LDA #$22
+   66 2061:85 01        		STA sysptr+1		; Store address $2200 at $0000
+   67                   
+   68 2063:A9 10        		LDA #$10		; Read 16 pages into RAM at $2200 to $37FF
+   69 2065:85 0A        		STA PageCount
+   70 2067:20 ** **     .0		JSR ReadByte	; Receive and echo byte from parallel
+   71 206A:92 00        		STA (sysptr)		; Store byte in ($0000) 
+   72 206C:E6 00        		INC sysptr
+   73 206E:D0 F7        		BNE .0
+   74 2070:E6 01        		INC sysptr+1
+   75 2072:C6 0A        		DEC PageCount	; Full 256 byte page was received 
+   76 2074:D0 F1        		BNE .0
+   77                   
+   78                   ; Write values in RAM to cartridge
+   79 2076:A9 00        		LDA #$00
+   80 2078:85 00        		STA sysptr
+   81 207A:A9 22        		LDA #$22
+   82 207C:85 01        		STA sysptr+1
+   83 207E:A9 10        		LDA #$10		; Loop through 16 pages again
+   84 2080:85 0A        		STA PageCount
+   85 2082:A5 06        .2		LDA CartPage
+   86 2084:20 ** **     		JSR SetCartBlock2
+   87 2087:A9 08        		LDA #RESTLESS
+   88 2089:8D 8B FD     		STA IODAT
+   89 208C:A6 09        		LDX Unknown2
+   90 208E:A0 00        		LDY #$00
+   91 2090:B1 00        .1		LDA (sysptr),y
+   92 2092:8D B2 FC     		STA RCART_0		; Store data in Pinky ROM
+   93 2095:C8           		INY
+   94 2096:D0 F8        		BNE .1
+   95 2098:E6 01        		INC sysptr+1
+   96 209A:C6 0A        		DEC PageCount
+   97 209C:CA           		DEX
+   98 209D:D0 F1        		BNE .1
+   99 209F:E6 06        		INC CartPage
+  100 20A1:A5 0A        		LDA PageCount
+  101 20A3:D0 DD        		BNE .2
+Epyx HandyAsm 1.12      cartload.src                    09-Aug-12517:33:42 Page    3
+                                                        17:33:42  
 
-  102 20BF:10 FB        		BPL .3			; Wait for strobe again
-  103 20C1:68           		PLA				; Restore A
-  104 20C2:4C ** **     		JMP WriteByte	; Write A to page 1 and return
-  105                   
-  106                   ; Strobe (6), zero to 2, zero to 7
-  107 20C5:             BeginUpload
-  108 20C5:20 ** **     		JSR ReadPage8	; Read byte from page 8
-  109 20C8:29 40        		AND #$40		; Wait for strobe on bit 6
-  110 20CA:F0 F9        		BEQ BeginUpload
-  111 20CC:20 ** **     		JSR Write0Page2	; Select (or write zero) page 2
-  112 20CF:4C ** **     		JMP Write0Page7	; Page 7 and return
-  113                   
-  114                   ; Strobe (7), zero to 6, zero to 3
-  115 20D2:             EndUpload
-  116 20D2:20 ** **     		JSR ReadPage8	; Read byte from page 8
-  117 20D5:10 FB        		BPL EndUpload	; Wait for strobe on bit 7
-  118 20D7:20 ** **     		JSR Write0Page6	; Write zero to page 6
-  119 20DA:4C ** **     		JMP Write0Page3	; Write zero to page 3
-  120                   
-  121 20DD:             InitComm ; (Preserves A)
-  122 20DD:48           		PHA
-  123 20DE:20 ** **     .1		JSR ReadPage8	; Read a byte from page 8
-  124 20E1:29 40        		AND #$40		; Check for bit 6
-  125 20E3:D0 F9        		BNE .1			; Wait
-  126 20E5:20 ** **     		JSR Write0Page6	; Zero to page 6
-  127 20E8:20 ** **     		JSR Write0Page7	; Zero to page 7
-  128 20EB:20 ** **     .2		JSR ReadPage8	; Read a byte from page 8 
-  129 20EE:29 40        		AND #$40
-  130 20F0:F0 F9        		BEQ .2			; Wait for strobe bit 6 again
-  131 20F2:20 ** **     		JSR Write0Page6	; Zero to page 6
-  132 20F5:20 ** **     		JSR Write0Page3	; Zero to page 3
-  133 20F8:68           		PLA
-  134 20F9:60           		RTS
-  135                   
-  136 20FA:             Write0Page6
-  137 20FA:A9 06        		LDA #$06		; Select page 6 
-  138 20FC:80 **        		BRA WriteCart1
-  139 20FE:             Write0Page2
-  140 20FE:A9 02        		LDA #$02		; Select page 2
-  141 2100:80 **        		BRA WriteCart1
-  142 2102:             Write0Page7
-  143 2102:A9 07        		LDA #$07		; Select page 7
-  144 2104:80 **        		BRA WriteCart1
-  145 2106:             Write0Page3
-  146 2106:A9 03        		LDA #$03		; Select page 3
-  147 2108:             WriteCart1
-  148 2108:20 ** **     		JSR SetCartBlock1
-  149 210B:9C B3 FC     		STZ RCART_1		; Clear RCART_1
-  150 210E:60           		RTS
-  151                   
-  152                   ; Out A with value from RCART_1
-  153 210F:             ReadPage8
-  154 210F:A9 08        		LDA #$08
-  155 2111:80 **        		BRA ReadCart1
-  156 2113:             ReadPage9
-  157 2113:A9 09        		LDA #$09
-  158 2115:             ReadCart1
-  159 2115:20 ** **     		JSR SetCartBlock1
-  160 2118:AD B3 FC     		LDA RCART_1
-Epyx HandyAsm 1.12      cartload                        14-Apr-12518:46:26 Page    4
-                                                        18:46:26  
+  102 20A5:A9 1A        		LDA #$1A
+  103 20A7:8D 8B FD     		STA IODAT
+  104 20AA:A5 06        		LDA CartPage
+  105 20AC:D0 AD        		BNE .3			; Repeat 
+  106 20AE:00           		BRK				; Pause Mandy
+  107 20AF:EA           		NOP
+  108 20B0:4C 00 20     		JMP BASE_ORG	; Start program if requested
+  109                   
+  110                   ; Read and echo byte from page 9 to 1
+  111 20B3:             ReadByte
+  112 20B3:20 ** **     		JSR ReadPage8	; Read status byte from page 8
+  113 20B6:10 FB        		BPL ReadByte	; Wait for strobe on bit 7
+  114 20B8:4C ** **     		JMP ReadPage9	; Read from page 9 data (latch)
+  115                   
+  116 20BB:48           		PHA
+  117 20BC:20 ** **     .3		JSR ReadPage8	; Read status byte from page 8
+  118 20BF:10 FB        		BPL .3			; Wait for strobe again
+  119 20C1:68           		PLA				; Restore A
+  120 20C2:4C ** **     		JMP WriteByte	; Write A to page 1 and return (latch)
+  121                   
+  122                   ; Strobe (6), zero to 2, zero to 7
+  123 20C5:             BeginUpload
+  124 20C5:20 ** **     		JSR ReadPage8	; Read status byte from page 8
+  125 20C8:29 40        		AND #$40		; Wait for strobe on bit 6
+  126 20CA:F0 F9        		BEQ BeginUpload
+  127                   ; Switch to TX mode
+  128 20CC:20 ** **     		JSR Write0Page2	; Select (or write zero) page 2
+  129 20CF:4C ** **     		JMP Write0Page7	; Page 7 and return
+  130                   
+  131                   ; Strobe (7), zero to 6, zero to 3
+  132 20D2:             EndUpload
+  133 20D2:20 ** **     		JSR ReadPage8	; Read status byte from page 8
+  134 20D5:10 FB        		BPL EndUpload	; Wait for strobe on bit 7
+  135                   ; Switch to RX mode?
+  136 20D7:20 ** **     		JSR Write0Page6	; Write zero to page 6
+  137 20DA:4C ** **     		JMP Write0Page3	; Write zero to page 3
+  138                   
+  139 20DD:             NotifyHandyReset ; (Preserves A) init link
+  140 20DD:48           		PHA
+  141                   ; Wait for Amiga in TX mode
+  142 20DE:20 ** **     .1		JSR ReadPage8	; Read status byte from page 8
+  143 20E1:29 40        		AND #$40		; Check for bit 6
+  144 20E3:D0 F9        		BNE .1			; Wait
+  145                   
+  146                   ; Switch to TX mode
+  147 20E5:20 ** **     		JSR Write0Page6	; Zero to page 6
+  148 20E8:20 ** **     		JSR Write0Page7	; Zero to page 7
+  149                   
+  150                   ; Wait for Amiga in RX mode
+  151 20EB:20 ** **     .2		JSR ReadPage8	; Read status byte from page 8 
+  152 20EE:29 40        		AND #$40
+  153 20F0:F0 F9        		BEQ .2			; Wait for strobe bit 6 again
+  154                   
+  155                   ; Switch to RX mode
+  156 20F2:20 ** **     		JSR Write0Page6	; Zero to page 6
+  157 20F5:20 ** **     		JSR Write0Page3	; Zero to page 3
+  158 20F8:68           		PLA
+  159 20F9:60           		RTS
+  160                   
+Epyx HandyAsm 1.12      cartload.src                    09-Aug-12517:33:42 Page    4
+                                                        17:33:42  
 
-  161 211B:60           		RTS
-  162                   
-  163                   ; Write A to page 1, preserves A
-  164 211C:             WriteByte
-  165 211C:48           		PHA
-  166 211D:A9 01        		LDA #$01
-  167 211F:20 ** **     		JSR SetCartBlock1
-  168 2122:68           		PLA
-  169 2123:8D B3 FC     		STA RCART_1
-  170 2126:60           		RTS
-  171                   
-  172                   ; Block select on cartridge bank 1?
-  173                   ; In A, saves X and Y
-  174 2127:             SetCartBlock1
-  175 2127:DA           		PHX
-  176 2128:5A           		PHY
-  177 2129:AA           		TAX
-  178 212A:A0 02        		LDY #POWERON		; Power on and cart address strobe to 
-  179 212C:8C 87 FD     		STY SYSCTL1			; Strobe cart address to reset ripple 
-  180 212F:C8           		INY
-  181 2130:AD 8B FD     		LDA IODAT
-  182 2133:09 08        		ORA #RESTLESS
-  183 2135:8D 8B FD     		STA IODAT
-  184 2138:AD ** **     		LDA IODIR_RAM		; Toggle a few bits in IODIR
-  185 213B:09 02        		ORA #CART_ADDR_DATA	; Cart address data to output
-  186 213D:09 08        		ORA #RESTLESS		; Rest output to output
-  187 213F:8D 8A FD     		STA IODIR
-  188 2142:AD 8B FD     		LDA IODAT
-  189 2145:09 02        		ORA #CART_ADDR_DATA
-  190 2147:09 08        		ORA #RESTLESS
-  191 2149:8D ** **     		STA .fd				; Store IODAT value with Rest and Cart Ad
-  192 214C:29 FD        		AND #~CART_ADDR_DATA
-  193 214E:09 08        		ORA #RESTLESS
-  194 2150:8D ** **     		STA .fe				; Store IODAT with Rest set to 1 and Cart
-  195 2153:8A           		TXA
-  196 2154:38           		SEC
-  197 2155:2A           		ROL A
-  198 2156:90 **        .2		BCC .0
-  199 2158:AE 79 21     		LDX $2179
-  200 215B:8E 8B FD     		STX IODAT
-  201 215E:80 **        		BRA .1
-  202 2160:AE 7A 21     .0		LDX $217A
-  203 2163:8E 8B FD     		STX IODAT
-  204 2166:8C 87 FD     .1		STY SYSCTL1
-  205 2169:88           		DEY
-  206 216A:8C 87 FD     		STY SYSCTL1
-  207 216D:C8           		INY
-  208 216E:0A           		ASL A
-  209 216F:D0 E5        		BNE .2
-  210 2171:A9 08        		LDA #RESTLESS
-  211 2173:8D 8B FD     		STA IODAT
-  212 2176:7A           		PLY
-  213 2177:FA           		PLX
-  214 2178:60           		RTS
-  215                   
-  216 2179:             .fd		.DS 1
-  217 217A:             .fe		.DS 1
-  218                   
-  219 217B:             SetCartBlock2
-Epyx HandyAsm 1.12      cartload                        14-Apr-12518:46:26 Page    5
-                                                        18:46:26  
+  161 20FA:             Write0Page6	; Set 0110
+  162 20FA:A9 06        		LDA #$06		; Select page 6 
+  163 20FC:80 **        		BRA WriteCart1
+  164 20FE:             Write0Page2	; Set 0010
+  165 20FE:A9 02        		LDA #$02		; Select page 2
+  166 2100:80 **        		BRA WriteCart1
+  167 2102:             Write0Page7	; Set 0111
+  168 2102:A9 07        		LDA #$07		; Select page 7
+  169 2104:80 **        		BRA WriteCart1
+  170 2106:             Write0Page3	; Set 0011 
+  171 2106:A9 03        		LDA #$03		; Select page 3
+  172 2108:             WriteCart1	; Set cart control
+  173 2108:20 ** **     		JSR SetCartBlock1
+  174 210B:9C B3 FC     		STZ RCART_1		; Clear RCART_1
+  175 210E:60           		RTS
+  176                   
+  177                   ; Out A with value from RCART_1
+  178 210F:             ReadPage8	; Read status
+  179 210F:A9 08        		LDA #$08
+  180 2111:80 **        		BRA ReadCart1
+  181 2113:             ReadPage9	; Read latch
+  182 2113:A9 09        		LDA #$09
+  183 2115:             ReadCart1	; SetPageread
+  184 2115:20 ** **     		JSR SetCartBlock1
+  185 2118:AD B3 FC     		LDA RCART_1
+  186 211B:60           		RTS
+  187                   
+  188                   ; Write A to page 1, preserves A
+  189 211C:             WriteByte		; Write latch
+  190 211C:48           		PHA
+  191 211D:A9 01        		LDA #$01
+  192 211F:20 ** **     		JSR SetCartBlock1
+  193 2122:68           		PLA
+  194 2123:8D B3 FC     		STA RCART_1
+  195 2126:60           		RTS
+  196                   
+  197                   ; Block select on cartridge bank 1?
+  198                   ; In A, saves X and Y
+  199 2127:             SetCartBlock1	; Set cart control
+  200 2127:DA           		PHX
+  201 2128:5A           		PHY
+  202 2129:AA           		TAX
+  203 212A:A0 02        		LDY #POWERON		; Power on and cart address strobe to 
+  204 212C:8C 87 FD     		STY SYSCTL1			; Strobe cart address to reset ripple 
+  205 212F:C8           		INY
+  206 2130:AD 8B FD     		LDA IODAT
+  207 2133:09 08        		ORA #RESTLESS
+  208 2135:8D 8B FD     		STA IODAT
+  209 2138:AD ** **     		LDA IODIR_RAM		; Toggle a few bits in IODIR
+  210 213B:09 02        		ORA #CART_ADDR_DATA	; Cart address data to output
+  211 213D:09 08        		ORA #RESTLESS		; Rest output to output
+  212 213F:8D 8A FD     		STA IODIR
+  213 2142:AD 8B FD     		LDA IODAT
+  214 2145:09 02        		ORA #CART_ADDR_DATA
+  215 2147:09 08        		ORA #RESTLESS
+  216 2149:8D ** **     		STA .fd				; Store IODAT value with Rest and Cart Ad
+  217 214C:29 FD        		AND #~CART_ADDR_DATA
+  218 214E:09 08        		ORA #RESTLESS
+  219 2150:8D ** **     		STA .fe				; Store IODAT with Rest set to 1 and Cart
+Epyx HandyAsm 1.12      cartload.src                    09-Aug-12517:33:42 Page    5
+                                                        17:33:42  
 
-  220 217B:8D ** **     		STA .ff
-  221 217E:A0 1A        		LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
-  222 2180:A9 18        		LDA #READ_ENABLE+RESTLESS
-  223 2182:38           		SEC
-  224 2183:80 **        		BRA .2
-  225 2185:90 **        .0		BCC .1
-  226 2187:8C 8B FD     		STY IODAT		; Set CART_ADDR_DATA to clock in 1 bit
-  227 218A:18           		CLC
-  228 218B:E8           .1		INX				; Adds in CART_ADDR_STROBE
-  229 218C:8E 87 FD     		STX SYSCTL1
-  230 218F:A2 02        .2		LDX #POWERON
-  231 2191:8E 87 FD     		STX SYSCTL1
-  232 2194:2E ** **     		ROL .ff
-  233 2197:8D 8B FD     		STA IODAT
-  234 219A:D0 E9        		BNE .0			; Reset CART_ADDR_DATA to clock 0 bit and p
-  235 219C:60           		RTS
-  236                   
-  237 219D:00           .ff		.BY 0
-  238                   
-  239 219E:             SPRSYS_RAM		.DS 1 ; 219E
-  240 219F:             DISPCTL_RAM		.DS 1 ; 219F
-  241 21A0:             IODAT_RAM		.DS 1 ; 21A0
-  242 21A1:             IODIR_RAM		.DS 1 ; 21A1
+  220 2153:8A           		TXA
+  221 2154:38           		SEC
+  222 2155:2A           		ROL A
+  223 2156:90 **        .2		BCC .0
+  224 2158:AE ** **     		LDX .fd
+  225 215B:8E 8B FD     		STX IODAT
+  226 215E:80 **        		BRA .1
+  227 2160:AE ** **     .0		LDX .fe
+  228 2163:8E 8B FD     		STX IODAT
+  229 2166:8C 87 FD     .1		STY SYSCTL1
+  230 2169:88           		DEY
+  231 216A:8C 87 FD     		STY SYSCTL1
+  232 216D:C8           		INY
+  233 216E:0A           		ASL A
+  234 216F:D0 E5        		BNE .2
+  235 2171:A9 08        		LDA #RESTLESS
+  236 2173:8D 8B FD     		STA IODAT
+  237 2176:7A           		PLY
+  238 2177:FA           		PLX
+  239 2178:60           		RTS
+  240                   
+  241 2179:             .fd		.DS 1
+  242 217A:             .fe		.DS 1
   243                   
-Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:46:26 Page    6
-                                                        18:46:26  
+  244 217B:             SetCartBlock2
+  245 217B:8D ** **     		STA .ff
+  246 217E:A0 1A        		LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
+  247 2180:A9 18        		LDA #READ_ENABLE+RESTLESS
+  248 2182:38           		SEC
+  249 2183:80 **        		BRA .2
+  250 2185:90 **        .0		BCC .1
+  251 2187:8C 8B FD     		STY IODAT		; Set CART_ADDR_DATA to clock in 1 bit
+  252 218A:18           		CLC
+  253 218B:E8           .1		INX				; Adds in CART_ADDR_STROBE
+  254 218C:8E 87 FD     		STX SYSCTL1
+  255 218F:A2 02        .2		LDX #POWERON
+  256 2191:8E 87 FD     		STX SYSCTL1
+  257 2194:2E ** **     		ROL .ff
+  258 2197:8D 8B FD     		STA IODAT
+  259 219A:D0 E9        		BNE .0			; Reset CART_ADDR_DATA to clock 0 bit and p
+  260 219C:60           		RTS
+  261                   
+  262 219D:00           .ff		.BY 0
+  263                   
+  264 219E:             SPRSYS_RAM		.DS 1 ; 219E
+  265 219F:             DISPCTL_RAM		.DS 1 ; 219F
+  266 21A0:             IODAT_RAM		.DS 1 ; 21A0
+  267 21A1:             IODIR_RAM		.DS 1 ; 21A1
+  268                   
+Epyx HandyAsm 1.12      Symbols                         09-Aug-12517:33:42 Page    6
+                                                        17:33:42  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -312,6 +337,8 @@ $FC0B COLLBASH                          $FC0A COLLBASL
 $FC25 COLLOFFH                          $FC24 COLLOFFL
 $FD91 CPUSLEEP                          $FFFE CPU_IRQ
 $FFFA CPU_NMI                           $FFFC CPU_RESET
+$0008 CartOffsetHi                      $0007 CartOffsetLo
+$0006 CartPage                          $000B CartSize
 $FD95 DISPADRH                          $FD94 DISPADRL
 $FD92 DISPCTL                           $219F DISPCTL_RAM
 $1FE0 DISPLAY_BUFSIZE                   $0008 DISP_COLOR
@@ -331,22 +358,22 @@ $FDA7 GREEN7                            $FDA8 GREEN8
 $FDA9 GREEN9                            $FDAA GREENA
 $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
+Epyx HandyAsm 1.12      Symbols                         09-Aug-12517:33:42 Page    7
+                                                        17:33:42  
+
 $FDAF GREENF                            $FC00 HARDWARE_START
 MACRO HBRK                              $FD00 HCOUNT
-Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:46:26 Page    7
-                                                        18:46:26  
-
-$0020 HFLIP                             $FC05 HOFFH
-$FC04 HOFFL                             $0001 HORIZONTAL_INT
-$FCC4 HOWIE                             $FC15 HPOSSTRTH
-$FC14 HPOSSTRTL                         $FC29 HSIZOFFH
-$FC28 HSIZOFFL                          MACRO INITINT
-MACRO INITSYS                           $0002 INNER_BUTTON
-$FD80 INTRST                            $FD81 INTSET
-$FD8B IODAT                             $21A0 IODAT_RAM
-$FD8A IODIR                             $21A1 IODIR_RAM
-$FCC3 IOData                            $FCC2 IOStatus
-$20DD InitComm                          $FCB0 JOYSTICK
+$0020 HFLIP                             $0001 HI
+$FC05 HOFFH                             $FC04 HOFFL
+$0001 HORIZONTAL_INT                    $FCC4 HOWIE
+$FC15 HPOSSTRTH                         $FC14 HPOSSTRTL
+$FC29 HSIZOFFH                          $FC28 HSIZOFFL
+MACRO INITINT                           MACRO INITSYS
+$0002 INNER_BUTTON                      $FD80 INTRST
+$FD81 INTSET                            $FD8B IODAT
+$21A0 IODAT_RAM                         $FD8A IODIR
+$21A1 IODIR_RAM                         $FCC3 IOData
+$FCC2 IOStatus                          $FCB0 JOYSTICK
 $0080 JOY_DOWN                          $0010 JOY_LEFT
 $0020 JOY_RIGHT                         $0040 JOY_UP
 $0004 LAST_CLOCK                        $FCC0 LEDS
@@ -354,96 +381,99 @@ $0010 LEFT0_SELECT                      $0020 LEFT1_SELECT
 $0040 LEFT2_SELECT                      $0080 LEFT3_SELECT
 $0008 LEFTHAND                          $0008 LEFTHANDED
 $00F0 LEFT_ATTENMASK                    $0080 LITERAL
-$FFF9 MAPCTL                            $FC55 MATHA
-$FC54 MATHB                             $FC53 MATHC
-$0020 MATHCARRY                         $FC52 MATHD
-$FC63 MATHE                             $FC62 MATHF
-$FC61 MATHG                             $FC60 MATHH
-$FC6F MATHJ                             $FC6E MATHK
-$FC6D MATHL                             $FC6C MATHM
-$FC57 MATHN                             $FC56 MATHP
-$0040 MATHWARNING                       $0080 MATHWORKING
-$FD88 MIKEYHREV                         $FD89 MIKEYSREV
-$FD00 MIKEY_BASE                        $0002 MIKEY_SPACE
-$FD44 MPAN                              $FD50 MSTEREO
-$FD9C MTEST0                            $FD9D MTEST1
-$FD9E MTEST2                            $0004 NOEXP
-$0005 NONCOLL_SPRITE                    $0004 NORMAL_SPRITE
-$0020 NO_COLLIDE                        $0000 ONE_PER_PIXEL
+$0000 LO                                $FFF9 MAPCTL
+$FC55 MATHA                             $FC54 MATHB
+$FC53 MATHC                             $0020 MATHCARRY
+$FC52 MATHD                             $FC63 MATHE
+$FC62 MATHF                             $FC61 MATHG
+$FC60 MATHH                             $FC6F MATHJ
+$FC6E MATHK                             $FC6D MATHL
+$FC6C MATHM                             $FC57 MATHN
+$FC56 MATHP                             $0040 MATHWARNING
+$0080 MATHWORKING                       $FD88 MIKEYHREV
+$FD89 MIKEYSREV                         $FD00 MIKEY_BASE
+$0002 MIKEY_SPACE                       $FD44 MPAN
+$FD50 MSTEREO                           $FD9C MTEST0
+$FD9D MTEST1                            $FD9E MTEST2
+$0004 NOEXP                             $0005 NONCOLL_SPRITE
+$0004 NORMAL_SPRITE                     $0020 NO_COLLIDE
+$20DD NotifyHandyReset                  $0000 ONE_PER_PIXEL
 $0008 OPTION1_BUTTON                    $0004 OPTION2_BUTTON
 $0001 OUTER_BUTTON                      $0008 OVERRUN
 $0001 PARBIT                            $0010 PAREN
 $0010 PARERR                            $0001 PAREVEN
 $0001 PAUSE_SWITCH                      $FD93 PBKUP
 $0002 POWERON                           $FC2F PROCADRH
-$FC2E PROCADRL                          $FCB2 RCART_0
-$FCB3 RCART_1                           $0010 READ_ENABLE
-$0010 RELOAD_HV                         $0020 RELOAD_HVS
-$0030 RELOAD_HVST                       $0030 RELOAD_MASK
-$0000 RELOAD_NONE                       $0008 RESETERR
-$0040 RESET_DONE                        MACRO RESET_TIMEOUT
-$0008 RESTART_BUTTON                    $0008 RESTLESS
-$0008 REUSE_PALETTE                     $0001 RIGHT0_SELECT
-$0002 RIGHT1_SELECT                     $0004 RIGHT2_SELECT
-$0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
-$0004 ROM_SPACE                         $0002 RXBRK
-$0040 RXINTEN                           $0040 RXRDY
-$20B3 ReadByte                          $2115 ReadCart1
-$210F ReadPage8                         $2113 ReadPage9
-$FC2D SCBADRH                           $FC2C SCBADRL
-$FC11 SCBNEXTH                          $FC10 SCBNEXTL
-$FC23 SCVPOSH                           $FC22 SCVPOSL
-$FD90 SDONEACK                          $FD8C SERCTL
-$FD8D SERDAT                            $FD10 SERIALRATE
-Epyx HandyAsm 1.12      Symbols                         14-Apr-12518:46:26 Page    8
-                                                        18:46:26  
+$FC2E PROCADRL                          $000A PageCount
+$FCB2 RCART_0                           $FCB3 RCART_1
+$0010 READ_ENABLE                       $0010 RELOAD_HV
+$0020 RELOAD_HVS                        $0030 RELOAD_HVST
+$0030 RELOAD_MASK                       $0000 RELOAD_NONE
+$0008 RESETERR                          $0040 RESET_DONE
+MACRO RESET_TIMEOUT                     $0008 RESTART_BUTTON
+$0008 RESTLESS                          $0008 REUSE_PALETTE
+$0001 RIGHT0_SELECT                     $0002 RIGHT1_SELECT
+$0004 RIGHT2_SELECT                     $0008 RIGHT3_SELECT
+$000F RIGHT_ATTENMASK                   $0004 ROM_SPACE
+$0002 RXBRK                             $0040 RXINTEN
+$0040 RXRDY                             $20B3 ReadByte
+$2115 ReadCart1                         $210F ReadPage8
+$2113 ReadPage9                         $FC2D SCBADRH
+$FC2C SCBADRL                           $FC11 SCBNEXTH
+Epyx HandyAsm 1.12      Symbols                         09-Aug-12517:33:42 Page    8
+                                                        17:33:42  
 
-$0010 SERIAL_INT                        MACRO SET_BRK
-$0007 SHADOW_SPRITE                     $0080 SIGNMATH
-$0004 SKIP_SPRITE                       $FC82 SPRCOLL
-$FC80 SPRCTL0                           $FC81 SPRCTL1
-$FC13 SPRDLINEH                         $FC12 SPRDLINEL
-$FC21 SPRDOFFH                          $FC20 SPRDOFFL
-$FC91 SPRGO                             $FC19 SPRHSIZH
-$FC18 SPRHSIZL                          $FC83 SPRINIT
-$0002 SPRITESTOP                        $0002 SPRITETOSTOP
-$0001 SPRITEWORKING                     $0001 SPRITE_GO
-$FC92 SPRSYS                            $219E SPRSYS_RAM
-$FC1B SPRVSIZH                          $FC1A SPRVSIZL
-$FC1D STRETCHH                          $FC1C STRETCHL
-$FC90 SUZYBUSEN                         $FC88 SUZYHREV
-$FC89 SUZYSREV                          $FC00 SUZY_BASE
-$0001 SUZY_SPACE                        $FCB1 SWITCHES
-$FD87 SYSCTL1                           $2127 SetCartBlock1
-$217B SetCartBlock2                     $0080 THREE_PER_PIXEL
-$FC03 TILTACUMH                         $FC02 TILTACUML
-$FC1F TILTH                             $FC1E TILTL
-$FD00 TIMER0                            $0001 TIMER0_INT
-$FD04 TIMER1                            $0002 TIMER1_INT
-$FD08 TIMER2                            $0004 TIMER2_INT
-$FD0C TIMER3                            $0008 TIMER3_INT
-$FD10 TIMER4                            $FD14 TIMER5
-$0020 TIMER5_INT                        $FD18 TIMER6
-$0040 TIMER6_INT                        $FD1C TIMER7
-$0080 TIMER7_INT                        $0008 TIMER_DONE
-$0000 TIM_BACKUP                        $0001 TIM_CONTROLA
-$0003 TIM_CONTROLB                      $0002 TIM_COUNT
-$FC01 TMPADRH                           $FC00 TMPADRL
-$0080 TURBO_DISABLE                     $0040 TWO_PER_PIXEL
-$0002 TXBRK                             $0020 TXEMPTY
-$0080 TXINTEN                           $0004 TXOPEN
-$0080 TXRDY                             $0004 UNSAFEACCESS
-$0004 UNSAFEACCESSRST                   $FD08 VCOUNT
-$0008 VECTOR_SPACE                      $0004 VERTICAL_INT
-$0010 VFLIP                             $FC0D VIDADRH
-$FC0C VIDADRL                           $FC09 VIDBASH
-$FC08 VIDBASL                           $FC07 VOFFH
-$FC06 VOFFL                             $FC17 VPOSSTRTH
-$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
-$FC26 VSIZACUML                         $FC2B VSIZOFFH
-$FC2A VSIZOFFL                          $0010 VSTRETCH
-$0010 VSTRETCHING                       $20FE Write0Page2
-$2106 Write0Page3                       $20FA Write0Page6
-$2102 Write0Page7                       $211C WriteByte
-$2108 WriteCart1                        $0006 XOR_SHADOW_SPRITE
-$0006 XOR_SPRITE                        $0000 ptr
+$FC10 SCBNEXTL                          $FC23 SCVPOSH
+$FC22 SCVPOSL                           $FD90 SDONEACK
+$FD8C SERCTL                            $FD8D SERDAT
+$FD10 SERIALRATE                        $0010 SERIAL_INT
+MACRO SET_BRK                           $0007 SHADOW_SPRITE
+$0080 SIGNMATH                          $0004 SKIP_SPRITE
+$FC82 SPRCOLL                           $FC80 SPRCTL0
+$FC81 SPRCTL1                           $FC13 SPRDLINEH
+$FC12 SPRDLINEL                         $FC21 SPRDOFFH
+$FC20 SPRDOFFL                          $FC91 SPRGO
+$FC19 SPRHSIZH                          $FC18 SPRHSIZL
+$FC83 SPRINIT                           $0002 SPRITESTOP
+$0002 SPRITETOSTOP                      $0001 SPRITEWORKING
+$0001 SPRITE_GO                         $FC92 SPRSYS
+$219E SPRSYS_RAM                        $FC1B SPRVSIZH
+$FC1A SPRVSIZL                          $FC1D STRETCHH
+$FC1C STRETCHL                          $FC90 SUZYBUSEN
+$FC88 SUZYHREV                          $FC89 SUZYSREV
+$FC00 SUZY_BASE                         $0001 SUZY_SPACE
+$FCB1 SWITCHES                          $FD87 SYSCTL1
+$2127 SetCartBlock1                     $217B SetCartBlock2
+$0080 THREE_PER_PIXEL                   $FC03 TILTACUMH
+$FC02 TILTACUML                         $FC1F TILTH
+$FC1E TILTL                             $FD00 TIMER0
+$0001 TIMER0_INT                        $FD04 TIMER1
+$0002 TIMER1_INT                        $FD08 TIMER2
+$0004 TIMER2_INT                        $FD0C TIMER3
+$0008 TIMER3_INT                        $FD10 TIMER4
+$FD14 TIMER5                            $0020 TIMER5_INT
+$FD18 TIMER6                            $0040 TIMER6_INT
+$FD1C TIMER7                            $0080 TIMER7_INT
+$0008 TIMER_DONE                        $0000 TIM_BACKUP
+$0001 TIM_CONTROLA                      $0003 TIM_CONTROLB
+$0002 TIM_COUNT                         $FC01 TMPADRH
+$FC00 TMPADRL                           $0080 TURBO_DISABLE
+$0040 TWO_PER_PIXEL                     $0002 TXBRK
+$0020 TXEMPTY                           $0080 TXINTEN
+$0004 TXOPEN                            $0080 TXRDY
+$0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
+$0009 Unknown2                          $0002 Unused
+$FD08 VCOUNT                            $0008 VECTOR_SPACE
+$0004 VERTICAL_INT                      $0010 VFLIP
+$FC0D VIDADRH                           $FC0C VIDADRL
+$FC09 VIDBASH                           $FC08 VIDBASL
+$FC07 VOFFH                             $FC06 VOFFL
+$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
+$FC27 VSIZACUMH                         $FC26 VSIZACUML
+$FC2B VSIZOFFH                          $FC2A VSIZOFFL
+$0010 VSTRETCH                          $0010 VSTRETCHING
+$20FE Write0Page2                       $2106 Write0Page3
+$20FA Write0Page6                       $2102 Write0Page7
+$211C WriteByte                         $2108 WriteCart1
+$0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
+$0000 sysptr                            
