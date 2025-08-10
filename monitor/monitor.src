@@ -165,8 +165,7 @@ Download
 		JSR ReadRange
 		BRA NextCommand
 
-.11
-		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
+.11		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
 		BNE .12
 		JSR ReadByte	; Read fill value 
 		PHA
