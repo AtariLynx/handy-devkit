@@ -12,12 +12,11 @@
 LO				.EQ 0
 HI				.EQ 1
 
-;NEXTZPG			.= $00
-
 	BEGIN_ZPAGE
 
-dest		.DS 2	; 00-01
-dest_old	.DS 2	; 02-03
+dest			.DS 2	; 00-01
+dest_old		.DS 2	; 02-03
+dest_old2		.DS 2	; 04-05
 
 	END_ZPAGE
 
@@ -26,15 +25,30 @@ NMI_ORG			.EQ $3000
 
 		.ORG BASE_ORG
 
-Unknown		.DS 1
-RunAddr		.DS 2
-SaveA		.DS 1	; $0203
-SaveX		.DS 1	; $0204
-SaveY		.DS 1	; $0205
-SaveSP		.DS 1	; $0206
-SavePCHi	.DS 1	; $0207
-SavePCLo	.DS 1	; $0208
-SavePS		.DS 1	; $0209
+Unknown			.DS 1	; 
+RunAddr			.DS 2
+SaveA			.DS 1	; $0203
+SaveX			.DS 1	; $0204
+SaveY			.DS 1	; $0205
+SaveSP			.DS 1	; $0206
+SavePCHi		.DS 1	; $0207
+SavePCLo		.DS 1	; $0208
+SavePS			.DS 1	; $0209
+SaveBusMonitor	.DS MONITOR_BYTECOUNT	; $020A
+;$020A-$0219	Monitor values
+
+; $021E
+		.ORG BASE_ORG+$20
+
+HowardEnabled	.DS 1	; Howard board enabled (0 = No, 1 = Yes)
+
+; $0221-$0223: 24-bit counter (inverted data, suggesting countdown operation)
+
+		.ORG $15D0
+
+; $15D0-$15D2: ROM configuration (address, size parameters)
+; $15D3: ROM bank/page control register
+; $15E0: bank switching?
 
 * ===========================================================================
 
@@ -66,20 +80,17 @@ NmiHandler	; $3000
 
 Main	; $3029
 		JSR ReadByte		; Read byte from parallel port
-; 		JSR $3295
 
 		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "Download"
 		BNE .2	
-		JSR Download		; Control loop for downloading files from Pinky to Mandy
+		JSR Download		; Control loop for downloading files from Handebug to Howard
 		BRA Main			; Next command
 
 ; $3035
 .2		CMP #UPLOAD_REQUEST	; Control command: 02 means "Upload"
 		BNE .5
-		JSR Upload			; Control loop for uploading data from Mandy to Pinky
-;		JSR $3150
-		BRA Main
-;		JMP Main			; Next command
+		JSR Upload			; Control loop for uploading data from Howard to Handebug
+		BRA Main			; Next command
 
 .5		CMP #GO_REQUEST		; Control command: 05 means "Go"
 		BNE .3				; Check whether to return from NMI
@@ -108,34 +119,33 @@ Main	; $3029
 ; $3067
 .4		CMP #SLAVE_REQUEST
 		BNE .6
-		JSR BeginUpload	; $32A9
+		JSR BeginUpload
 		LDA #$00
-		JSR WriteByte	; Zero (A) to page 1 $329E
-		JSR EndUpload	; $32b9
+		JSR WriteByte	; Zero (A) to page 1
+		JSR EndUpload
 		JMP Main		; Next control command
 
 ; $3079
 .6		CMP #SEE_HOWARD_REQUEST
-		BNE $3088
+		BNE .7
 		LDA #$01
-		STA $0220
+		STA HowardEnabled
 		STZ $15E0
 		JMP Main
 
 ; #3088
 .7		CMP #HIDE_HOWARD_REQUEST
 		BNE .8
-		STZ $0220
+		STZ HowardEnabled
 		JMP Main
 
 ; $3092
 .8		JMP Main		; Next control command
 
-; Control loop for downloading bin from Howard to Howdy
+; Control loop for downloading bin from Handebug to Howard
 Download
-
 ; $3095
-		JSR ReadByte	; $3295
+		JSR ReadByte
 
 ; $3098
 		CMP #END_OF_FILE ; End of .bin file
@@ -152,7 +162,7 @@ Download
 
 ; $30AC
 .12		CMP #DATA		; Load data of max 1-255 bytes (2)
-		BNE $30BC
+		BNE .13
 		JSR ReadByte	; Read byte from parallel port 
 		JSR ReadByte	; and another one, discarding first (potentially unused checksum)
 		TAY
@@ -161,34 +171,35 @@ Download
 
 .13		CMP #RUN_ADDRESS	; Receive run address (3)
 		BNE .14			; $30CB
-		JSR ReadAddress ; Read two bytes to X and A $31C4
-		STX RunAddr		; Store in a special place $0201
-		STA RunAddr+1	; $0202
+		JSR ReadAddress ; Read two bytes to X and A
+		STX RunAddr		; Store in a special place
+		STA RunAddr+1
 		BRA Download
 
 ; 30CB
 .14		CMP #REGISTER	; Read registers from Amiga/PC
-		BNE .15			; 30DE
+		BNE .15			; 
 		LDA #<SaveA		; #$03 Store $0203 as address in $00, $01
 		STA dest
 		LDA #>SaveA		; #$02
 		STA dest+1
 		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
-		JSR $31EB		; ReadRange?
+		JSR ReceiveRange
 		BRA Download
 
+; $30DE
 .15		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
 		BNE .27			; $311E
-		JSR ReadByte	; Read fill value $3295
+		JSR ReadByte	; Read fill value
 		PHA
-		JSR ReadAddress	; Read destination address $31c4
+		JSR ReadAddress	; Read destination address
 		STX dest
 		STA dest+1
 		JSR ReadByte	; Read count #3295
 		TAY
-		LDA $0220
+		LDA HowardEnabled	; Is Howard board enabled?
 		BNE $310F
-		JSR $3278
+		JSR $3278		; Memory map range
 		PLA
 ; $30FA
 .20		STA (dest_old)		; Store at address in ($02)
@@ -205,9 +216,8 @@ Download
 		BNE .20			; $30FA
 		JMP Download
 
-; $310F
-		PLA
-; $3110
+; $310F	Read when Howard board is enabled?
+		PLA				; Holds fill value
 .23
 		STA (dest)
 		INC dest
@@ -222,19 +232,19 @@ Download
 .27
 		CMP #BUS_MONITOR
 		BNE .24			; $3132
-		LDA #$0A
+		LDA #<SaveBusMonitor
 		STA dest
-		LDA #$02
+		LDA #>SaveBusMonitor
 		STA dest+1
-		LDY #$10
-		JSR $31EB
+		LDY #MONITOR_BYTECOUNT
+		JSR ReceiveRange	; $31EB
 		JMP Download
 
 ; $3132
 .24		CMP #LARGE_DATA
 		BNE .25			; $313F
-		JSR $31C4
-		JSR $31FA
+		JSR ReadAddress		; Read length
+		JSR $31FA			; Handle large data routine
 		JMP Download
 
 ; 313F
@@ -252,37 +262,37 @@ Done
 
 ; $3150
 Upload
-.30		JSR $3295
-		CMP #$00
-		BNE $315A
-		JMP $31C3
+.30		JSR ReadByte
+		CMP #END_OF_FILE
+		BNE .31			; $315A
+		JMP UploadDone	; $31C3
 
 ; $315A
-.31		CMP #$01
+.31		CMP #ORIGIN
 		BNE .32			; $3167
-		JSR $31C4
+		JSR ReadAddress
 		STX dest
 		STA dest+1
 		BRA .30			; $3150
 
 ; $3167
-.32		CMP #$02
+.32		CMP #DATA
 		BNE .33			; $3191
-		JSR $3295
+		JSR ReadByte
 		TAY
 		LDA dest
-		STA $04
+		STA dest_old2
 		LDA dest+1
-		STA $05
-		JSR $32A9
+		STA dest_old2+1
+		JSR BeginUpload
 		LDA #$02
-		JSR $329E
-		LDA $021E
-		JSR $329E
+		JSR WriteByte
+		LDA $021E		; Similar to $FBB9 in monitor.src (version?)
+		JSR WriteByte
 		TYA
-		JSR $329E
-		JSR $3239	
-		JSR $32B9
+		JSR WriteByte	; Length
+		JSR $3239
+		JSR EndUpload
 		BRA .30
 
 ; $3191
@@ -293,11 +303,11 @@ Upload
 		LDA #$02
 		STA dest+1
 		LDY #$07
-		JSR $32A9
+		JSR BeginUpload
 		LDA #$10
-		JSR $329E
+		JSR WriteByte
 		JSR $325A
-		JSR $32B9
+		JSR EndUpload
 		BRA .30
 
 ; $31AF
@@ -317,22 +327,23 @@ Upload
 		BRA .30
 
 ; $31C3
+UploadDone
 		RTS 
 
 ; $31C4
 ReadAddress
-		JSR $3295
+		JSR ReadByte
 		TAX
-		JMP $3295
+		JMP ReadByte
 
 ; $31CB
 ReadRange
-		LDA $0220
-		BNE $31EB
+		LDA HowardEnabled
+		BNE ReceiveRange
 		JSR $3278
 ; $31D3
 .38
-		JSR $3295
+		JSR ReadByte
 		STA ($02)
 		INC $02
 		BNE .37			; $31E3
@@ -348,8 +359,9 @@ ReadRange
 		RTS
 
 ; $31EB
-.39		JSR $3295
-		STA ($00)
+ReceiveRange	; Register Y is number of bytes to read
+.39		JSR ReadByte
+		STA (dest)
 		INC dest
 		BNE .3A			; $31F6
 		INC dest+1
@@ -359,17 +371,16 @@ ReadRange
 		RTS
 
 ; $31FA
-		LDY $0220
+; Large data handling routine
+		LDY HowardEnabled
 		BNE .43			; $3222
+
 		TAY
-; $3200
 		TXA
 		BEQ .40			; $3204
 		INY
-
-; $3204
 .40		JSR $3278
-.41		JSR $3295
+.41		JSR ReadByte
 		STA ($02)
 		INC $02
 		BNE .42			; $3217
@@ -385,20 +396,16 @@ ReadRange
 		STA $00
 		RTS
 
-; $3222
+; $3222		Howard board is enabled
 .43		TAY
 		TXA
 		BEQ .44			; $3227
 		INY
-; $3227
-.44
-		JSR $3295
+.44		JSR ReadByte
 		STA (dest)
 		INC dest
-		BNE $3232
+		BNE .45
 		INC dest+1
-
-; $3232
 .45		DEX
 		BNE .44			; $3227
 		DEY
@@ -406,19 +413,22 @@ ReadRange
 		RTS
 
 ; $3239
-		LDA $0220
+WriteRange
+		LDA HowardEnabled
 		BNE $325A
-		JSR $3278
+		JSR $3278		; Memory switch
+; $3241
 		JSR $32E3
-		JSR $329E
+		JSR WriteByte
 		INC $02
 		BNE $3252
 		STZ dest
 		INC dest+1
-		JSR $3278
+		JSR $3278		; Memory switch
+; $3252
 		DEY
 		BNE $3241
-		LDA $02
+		LDA dest_old
 		STA dest
 		RTS
 
@@ -428,7 +438,7 @@ ReadRange
 		LDA dest+1
 		STA $03
 		JSR $32E3
-		JSR $329E
+		JSR WriteByte
 		INC $02
 		BNE $3270
 
@@ -442,26 +452,29 @@ ReadRange
 		RTS
 
 ; $3278
+; Memory mapping function from dest to dest_old
 		LDA dest
 		STA $02
 		LDA dest+1
-		BMI $3292
+		BMI $3292		; Normal memory for $8000 and higher
 		CMP #$40
-		BCS $328F
+		BCS $328F		; Skip when dest+1 is $40-$7F
 		PHY
 		LDY #$01
-		STY $15E0
+		STY $15E0		; Switch to other memory
 		PLY
-		ORA #$40
+		ORA #$40		; Set $40 flag?
 		BRA $3292
+; $328F
 		STZ $15E0
+; $3292
 		STA $03
 		RTS
 
 ; $3295
 ReadByte
 		LDA $1580
-		BPL $3295
+		BPL ReadByte
 		LDA $1581
 		RTS
 
@@ -478,7 +491,7 @@ WriteByte
 BeginUpload
 		LDA $1580
 		AND #$40
-		BEQ $32A9
+		BEQ BeginUpload
 		STZ $1582
 		LDA #$80
 		STA $1583
@@ -487,7 +500,7 @@ BeginUpload
 ; $32B9
 EndUpload
 		LDA $1580
-		BPL $32B9
+		BPL EndUpload
 		LDA #$80
 		STA $1582
 		STZ $1583
@@ -511,34 +524,36 @@ InitComm
 		RTS
 
 ; $32E3
+ReadMemory
 		LDA $0200
 		BNE $32F6
 		LDA $03
-		CMP #$FC
+		CMP #$FC		; Memory range below $FC00
 		BNE $32F6
-		LDA $02
+		LDA $02			; 
 		BPL $32F8
-		CMP #$84
+		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
 		BCC $32F8
+; $32F6
 		LDA ($02)
 		RTS
 
 ; $32F9
-		JSR $31C4
+		JSR ReadAddress
 		STX $15D0
 		STA $15D1
-		JSR $3295
+		JSR ReadByte
 		STA $15D2
-		JSR $3295
+		JSR ReadByte
 		EOR #$FF
 		STA $0221
-		JSR $3295
+		JSR ReadByte
 		EOR #$FF
 		STA $0222
-		JSR $3295
+		JSR ReadByte
 		EOR #$FF
 		STA $0223
-		JSR $3295
+		JSR ReadByte
 		TAX
 		BMI $3335
 		AND #$07
@@ -582,11 +597,11 @@ InitComm
 		RTS
 
 ; $3375
-		JSR $3295
+		JSR ReadByte
 		STA ($04)
 		BRA $335F
-		JSR $32A9
-		LDA $0220
+		JSR BeginUpload
+		LDA HowardEnabled
 		BNE $3387
 		STZ $15D3
 		INC $0221
@@ -597,9 +612,9 @@ InitComm
 		BNE $33A0
 		LDA $0226
 		STA $15D3
-		JSR $32B9
+		JSR EndUpload
 		RTS
 
 		LDA ($04)
-		JSR $329E
+		JSR WriteByte
 		BRA $3387
