@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    1
-                                                        01:11:41  
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    1
+                                                        18:09:42  
 
     1                   * ====================================================
     2                   
@@ -9,696 +9,728 @@
    12      0000         LO				.EQ 0
    13      0001         HI				.EQ 1
    14                   
-   15      1000         RCARTEN			.EQ		$1000
-   16                   
-   17                   ; 0 -> No remapping of Handy RAM 
-   18                   ; 1 -> Remap 4000-7FFF in Handy RAM
-   19      15E0         SEGWR			.EQ 	$15E0
-   20                   
-   21      15D0         LDRADD			.EQ		$15D0 ; 20 bits of cartridge address
-   22      15D3         ROMPAGE			.EQ		$15D3
-   23                   ; Primary memory paging 
-   24                   ; Secondary memory paging 
-   25                   ;000 -> 4096 bytes/page 
-   26                   ;001 -> 2048 bytes/page 
-   27                   ;010 -> 1024 bytes/page 
-   28                   ;011 -> 512 bytes/page
-   29                   ;100 -> 256 bytes/page
-   30                   
-   31      0007         ROM_PAGING_MASK	.EQ		%00000111
-   32                   
-   33                   * ====================================================
-   34                   
-   35                   	BEGIN_ZPAGE
-    1      FFFE       + TEMPORG	  .= *
-    2 FFFE:           + 	  .ORG NEXTZPG
-    3                 + 
-   36                   
-   37 0000:             dest			.DS 2	; 00-01
-   38 0002:             dest_old		.DS 2	; 02-03		Remapped memory location of H
-   39 0004:             dest_old2		.DS 2	; 04-05
+   15 FFFE:             				.ORG $1000
+   16 1000:             RCARTEN			.DS	2	; $1000		Primary and secondary memory 
+   17                   
+   18 1002:             				.ORG $1580
+   19 1580:             PORT_STATUS		.DS	1	; $1580
+   20      0040         BUSY			.EQ %01000000
+   21      0080         DATA_AVAILABLE	.EQ %10000000
+   22 1581:             PORT_DATA		.DS 1	; $1581
+   23 1582:             PORT_DIRECTION	.DS 1	; $1582
+   24      0080         DIRECTION_INPUT			.EQ %10000000
+   25      0000         DIRECTION_OUTPUT		.EQ %00000000
+   26 1583:             PORT_POUT		.DS 1	; $1583
+   27      0080         POUT			.EQ %10000000
+   28                   
+   29 1584:             				.ORG 	$15D0
+   30 15D0:             LDRADD			.DS 3	; $15D0-$15D2 ; 20 bits of cartridge ad
+   31 15D3:             ROMPAGE			.DS 1	; $15D3 Primary and secondary paging
+   32      0000         PAGESIZE_4096	.EQ	%00000000
+   33      0001         PAGESIZE_2048	.EQ	%00000001
+   34      0002         PAGESIZE_1024	.EQ	%00000010
+   35      0003         PAGESIZE_512	.EQ	%00000011
+   36      0004         PAGESIZE_256	.EQ	%00000100
+   37      0007         ROM_PAGING_MASK			.EQ	%00000111
+   38      0007         PRIMARY_PAGING_MASK		.EQ	%00000111
+   39      0038         SECONDARY_PAGING_MASK	.EQ	%00111000
    40                   
-   41                   	END_ZPAGE
+   41 15D4:             				.ORG $15E0
+   42 15E0:             SEGWR			.DS 1 	; $15E0
+   43      0001         SEG				.EQ	%00000001	; 1 -> Remap 4000-7FFF in Handy R
+   44                   								; 0 -> No remapping of Handy RAM 
+   45                   
+   46                   * ====================================================
+   47                   
+   48                   		.IN 6502:src/syszpage.src
+    1                   
+    2                   * === syszpage.src ===================================
+    3                   *
+    4                   * System Zero-Page Data Allocations  --  the 6502 Side
+    5                   *
+    6                   * Copyright (C) 1988, Epyx, Inc.
+    7                   * All Rights Reserved
+    8                   * CONFIDENTIAL and PROPRIETARY
+    9                   *
+   10                   * Date		Name		Description
+   11                   * ---------	--------------	---------------------------
+   12                   * 7-Feb-90	SHL		Removed Apple emulation compatibility
+   13                   * 19 Apr 89	-RJ		Added description of rule for using s
+   14                   * 22 Mar 89	-RJ		Removed the audio variables from this
+   15                   * 20 Mar 89	RG Goudy	Added several new zpage pointers
+   16                   * 26 Jan 89	-RJ		Got rid of Interruptus
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    2
+                        6502:src/syszpage.src           18:09:42  
+
+   17                   * 26-Dec-88	=RJ Mical=	Created this file from sysdata.
+   18                   *
+   19                   * ====================================================
+   20                   
+   21                   
+   22                   * NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE
+   23                   *
+   24                   * This file should be included before any source code 
+   25                   *
+   26                   * NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE
+   27                   
+   28                   
+   29                   
+   30                   * System programmers note:  the sysptrs are defined as
+   31                   * pointers.  These can't be used during interrupt code
+   32                   * no promises regarding the usage of these for anythin
+   33                   * while using one of these is a dangerous thing to do
+   34                   		BEGIN_ZPAGE
+    1      15E1       + TEMPORG	  .= *
+    2 15E1:           + 	  .ORG NEXTZPG
+    3                 + 
+   35 0000:             sysptr		.DS 2
+   36 0002:             sysptr2		.DS 2
+   37 0004:             sysptr3		.DS 2
+   38                   		END_ZPAGE
     1      0006       + NEXTZPG	  .= *
     2      FALSE        	  #IF NEXTZPG > $0100
     4                 + 	  #ENDIF
     5 0006:           + 	  .ORG TEMPORG
     6                 + 
-   42                   
-   43      0200         BASE_ORG		.EQ $0200
-   44      3000         NMI_ORG			.EQ $3000
-   45                   
-   46 FFFE:             		.ORG BASE_ORG
-   47                   
-   48 0200:             Unknown			.DS 1	; 
-   49 0201:             RunAddr			.DS 2
-   50                   
-   51 0203:             REGISTERS:
-   52 0203:             SaveA			.DS 1	; $0203
-   53 0204:             SaveX			.DS 1	; $0204
-   54 0205:             SaveY			.DS 1	; $0205
-   55 0206:             SaveSP			.DS 1	; $0206
-   56 0207:             SavePCHi		.DS 1	; $0207
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    2
-                                                        01:11:41  
-
-   57 0208:             SavePCLo		.DS 1	; $0208
-   58 0209:             SavePS			.DS 1	; $0209
-   59 020A:             SaveBusMonitor	.DS MONITOR_BYTECOUNT	; $020A
-   60                   ;$020A-$0219	Monitor values
-   61                   
-   62                   ; $021E
-   63 021A:             		.ORG BASE_ORG+$20
-   64                   
-   65 0220:             HowardEnabled	.DS 1	; Howard board enabled (0 = No, 1 
-   66 0221:             CartridgeRegister	.DS	3
-   67                   ; $0221-$0223: 24-bit counter (inverted data, suggesti
-   68                   ; $0224-$0226
-   69                   
-   70                   ; $0226 ROMPAGE_RAM Shadow register to $15D3?
+   39                   
+   40                   
+   41                   
+   49                   
+   50      0200         BASE_ORG		.EQ $0200
+   51      3000         NMI_ORG			.EQ $3000
+   52                   
+   53 15E1:             		.ORG BASE_ORG
+   54                   
+   55 0200:             Unknown			.DS 1	; 
+   56 0201:             RunAddr			.DS 2
+   57                   
+   58 0203:             REGISTERS:
+   59 0203:             SaveA			.DS 1	; $0203
+   60 0204:             SaveX			.DS 1	; $0204
+   61 0205:             SaveY			.DS 1	; $0205
+   62 0206:             SaveSP			.DS 1	; $0206
+   63 0207:             SavePCHi		.DS 1	; $0207
+   64 0208:             SavePCLo		.DS 1	; $0208
+   65 0209:             SavePS			.DS 1	; $0209
+   66 020A:             SaveBusMonitor	.DS MONITOR_BYTECOUNT	; $020A
+   67                   ;$020A-$0219	Monitor values
+   68                   
+   69                   ; $021E
+   70 021A:             		.ORG BASE_ORG+$20
    71                   
-   72 0224:             		.ORG $15D0
-   73                   
-   74                   ; $15D0-$15D2: ROM configuration (address, size parame
-   75                   
-   76                   * ====================================================
-   77                   
-   78 15D0:             		.ORG NMI_ORG
-   79                   		.RUN *
+   72 0220:             HowardEnabled	.DS 1	; $0220	Howard board enabled (0 = 
+   73 0221:             CartRegister	.DS	3	; $0221-$0223
+   74                   ; $0221-$0223: 24-bit counter (inverted data, suggesti
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    3
+                                                        18:09:42  
+
+   75 0224:             Unknown1		.DS 2	; $0224-$0225
+   76 0226:             ROMPAGE_RAM		.DS 1 	; $0226 		Shadow register to ROMPA
+   77                   ; $0227
+   78                   
+   79                   * ====================================================
    80                   
-   81 3000:             NmiHandler	; $3000
-   82 3000:D8           		CLD
-   83 3001:8D 03 02     		STA SaveA 			; Store accumulator, X and Y register f
-   84 3004:8E 04 02     		STX SaveX
-   85 3007:8C 05 02     		STY SaveY
-   86 300A:68           		PLA 				; Get PC, ReturnHi, ReturnLo from stack
-   87 300B:FA           		PLX
-   88 300C:7A           		PLY
-   89 300D:8D 09 02     		STA SavePS			; Store for inspection
-   90 3010:8E 07 02     		STX SavePCHi
-   91 3013:8C 08 02     		STY SavePCLo
-   92 3016:BA           		TSX					; Store stack pointer 
-   93 3017:8E 06 02     		STX SaveSP
-   94                   
-   95                   ; Silence all audio channels	$301A
-   96 301A:9C 20 FD     		STZ AUDIO0+AUD_VOLCNTRL
-   97 301D:9C 28 FD     		STZ AUDIO1+AUD_VOLCNTRL
-   98 3020:9C 30 FD     		STZ AUDIO2+AUD_VOLCNTRL
-   99 3023:9C 38 FD     		STZ AUDIO3+AUD_VOLCNTRL
-  100                   
-  101                   ; $3026
-  102 3026:20 ** **     		JSR InitComm		; $32C7
+   81 0227:             		.ORG NMI_ORG
+   82                   		.RUN *
+   83                   
+   84 3000:             NmiHandler	; $3000
+   85 3000:D8           		CLD
+   86 3001:8D 03 02     		STA SaveA 			; Store accumulator, X and Y register f
+   87 3004:8E 04 02     		STX SaveX
+   88 3007:8C 05 02     		STY SaveY
+   89 300A:68           		PLA 				; Get PC, ReturnHi, ReturnLo from stack
+   90 300B:FA           		PLX
+   91 300C:7A           		PLY
+   92 300D:8D 09 02     		STA SavePS			; Store for inspection
+   93 3010:8E 07 02     		STX SavePCHi
+   94 3013:8C 08 02     		STY SavePCLo
+   95 3016:BA           		TSX					; Store stack pointer 
+   96 3017:8E 06 02     		STX SaveSP
+   97                   
+   98                   ; Silence all audio channels	$301A
+   99 301A:9C 20 FD     		STZ AUDIO0+AUD_VOLCNTRL
+  100 301D:9C 28 FD     		STZ AUDIO1+AUD_VOLCNTRL
+  101 3020:9C 30 FD     		STZ AUDIO2+AUD_VOLCNTRL
+  102 3023:9C 38 FD     		STZ AUDIO3+AUD_VOLCNTRL
   103                   
-  104 3029:             Main	; $3029
-  105 3029:20 ** **     		JSR ReadByte		; Read byte from parallel port
+  104                   ; $3026
+  105 3026:20 ** **     		JSR InitComm		; $32C7
   106                   
-  107 302C:C9 01        		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "D
-  108 302E:D0 **        		BNE .2	
-  109 3030:20 ** **     		JSR Download		; Control loop for downloading files f
-  110 3033:80 F4        		BRA Main			; Next command
-  111                   
-  112                   ; $3035
-  113 3035:C9 02        .2		CMP #UPLOAD_REQUEST	; Control command: 02 means "U
-  114 3037:D0 **        		BNE .5
-  115 3039:20 ** **     		JSR Upload			; Control loop for uploading data from 
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    3
-                                                        01:11:41  
+  107 3029:             Main	; $3029
+  108 3029:20 ** **     		JSR ReadByte		; Read byte from parallel port
+  109                   
+  110 302C:C9 01        		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "D
+  111 302E:D0 **        		BNE .2	
+  112 3030:20 ** **     		JSR Download		; Control loop for downloading files f
+  113 3033:80 F4        		BRA Main			; Next command
+  114                   
+  115                   ; $3035
+  116 3035:C9 02        .2		CMP #UPLOAD_REQUEST	; Control command: 02 means "U
+  117 3037:D0 **        		BNE .5
+  118 3039:20 ** **     		JSR Upload			; Control loop for uploading data from 
+  119 303C:80 EB        		BRA Main			; Next command
+  120                   
+  121 303E:C9 05        .5		CMP #GO_REQUEST		; Control command: 05 means "Go"
+  122 3040:D0 **        		BNE .3				; Check whether to return from NMI
+  123 3042:A9 04        		LDA #TXOPEN			; Turn off serial IRQs before starting
+  124 3044:8D 8C FD     		STA SERCTL			; and make sure serial port is open-col
+  125 3047:80 **        		BRA .9
+  126                   
+  127                   ; $3049
+  128 3049:C9 03        .3		CMP #CONTINUE_REQUEST
+  129 304B:D0 **        		BNE .4
+  130                   
+  131                   ; Restore all previous values and return from NMI hand
+  132 304D:AE 06 02     .9		LDX SaveSP		; Restore stack pointer
+  133 3050:9A           		TXS
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    4
+                                                        18:09:42  
 
-  116 303C:80 EB        		BRA Main			; Next command
-  117                   
-  118 303E:C9 05        .5		CMP #GO_REQUEST		; Control command: 05 means "Go"
-  119 3040:D0 **        		BNE .3				; Check whether to return from NMI
-  120 3042:A9 04        		LDA #TXOPEN			; Turn off serial IRQs before starting
-  121 3044:8D 8C FD     		STA SERCTL			; and make sure serial port is open-col
-  122 3047:80 **        		BRA .9
-  123                   
-  124                   ; $3049
-  125 3049:C9 03        .3		CMP #CONTINUE_REQUEST
-  126 304B:D0 **        		BNE .4
-  127                   
-  128                   ; Restore all previous values and return from NMI hand
-  129 304D:AE 06 02     .9		LDX SaveSP		; Restore stack pointer
-  130 3050:9A           		TXS
-  131 3051:AD 08 02     		LDA SavePCLo	.DS 1	; $0208
-  132 3054:48           		PHA
-  133 3055:AD 07 02     		LDA SavePCHi	.DS 1	; $0207
-  134 3058:48           		PHA
-  135 3059:AD 09 02     		LDA SavePS		.DS 1	; $0209
-  136 305C:48           		PHA
-  137 305D:AD 03 02     		LDA SaveA		; Load stored values for A, X, Y 
-  138 3060:AE 04 02     		LDX SaveX
-  139 3063:AC 05 02     		LDY SaveY
-  140 3066:40           		RTI
-  141                   
-  142                   ; $3067
-  143 3067:C9 04        .4		CMP #SLAVE_REQUEST
-  144 3069:D0 **        		BNE .6
-  145 306B:20 ** **     		JSR BeginUpload
-  146 306E:A9 00        		LDA #$00
-  147 3070:20 ** **     		JSR WriteByte	; Zero (A) to page 1
-  148 3073:20 ** **     		JSR EndUpload
-  149 3076:4C 29 30     		JMP Main		; Next control command
-  150                   
-  151                   ; $3079
-  152 3079:C9 06        .6		CMP #SEE_HOWARD_REQUEST
-  153 307B:D0 **        		BNE .7
-  154 307D:A9 01        		LDA #$01
-  155 307F:8D 20 02     		STA HowardEnabled
-  156 3082:9C E0 15     		STZ SEGWR		; No remapping of Handy RAM
-  157 3085:4C 29 30     		JMP Main
-  158                   
-  159                   ; #3088
-  160 3088:C9 07        .7		CMP #HIDE_HOWARD_REQUEST
-  161 308A:D0 **        		BNE .8
-  162 308C:9C 20 02     		STZ HowardEnabled
-  163 308F:4C 29 30     		JMP Main
-  164                   
-  165                   ; $3092
-  166 3092:4C 29 30     .8		JMP Main		; Next control command
+  134 3051:AD 08 02     		LDA SavePCLo	.DS 1	; $0208
+  135 3054:48           		PHA
+  136 3055:AD 07 02     		LDA SavePCHi	.DS 1	; $0207
+  137 3058:48           		PHA
+  138 3059:AD 09 02     		LDA SavePS		.DS 1	; $0209
+  139 305C:48           		PHA
+  140 305D:AD 03 02     		LDA SaveA		; Load stored values for A, X, Y 
+  141 3060:AE 04 02     		LDX SaveX
+  142 3063:AC 05 02     		LDY SaveY
+  143 3066:40           		RTI
+  144                   
+  145                   ; $3067
+  146 3067:C9 04        .4		CMP #SLAVE_REQUEST
+  147 3069:D0 **        		BNE .6
+  148 306B:20 ** **     		JSR BeginUpload
+  149 306E:A9 00        		LDA #$00
+  150 3070:20 ** **     		JSR WriteByte	; Zero (A) to page 1
+  151 3073:20 ** **     		JSR EndUpload
+  152 3076:4C 29 30     		JMP Main		; Next control command
+  153                   
+  154                   ; $3079
+  155 3079:C9 06        .6		CMP #SEE_HOWARD_REQUEST
+  156 307B:D0 **        		BNE .7
+  157 307D:A9 01        		LDA #$01
+  158 307F:8D 20 02     		STA HowardEnabled
+  159 3082:9C E0 15     		STZ SEGWR		; No remapping of Handy RAM
+  160 3085:4C 29 30     		JMP Main
+  161                   
+  162                   ; #3088
+  163 3088:C9 07        .7		CMP #HIDE_HOWARD_REQUEST
+  164 308A:D0 **        		BNE .8
+  165 308C:9C 20 02     		STZ HowardEnabled
+  166 308F:4C 29 30     		JMP Main
   167                   
-  168                   ; Control loop for downloading from Handebug to Howard
-  169 3095:             Download
-  170                   ; $3095
-  171 3095:20 ** **     		JSR ReadByte
-  172                   
-  173                   ; $3098
-  174 3098:C9 00        		CMP #END_OF_FILE ; End of .bin file
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    4
-                                                        01:11:41  
+  168                   ; $3092
+  169 3092:4C 29 30     .8		JMP Main		; Next control command
+  170                   
+  171                   ; Control loop for downloading from Handebug to Howard
+  172 3095:             Download
+  173                   ; $3095
+  174 3095:20 ** **     		JSR ReadByte
+  175                   
+  176                   ; $3098
+  177 3098:C9 00        		CMP #END_OF_FILE ; End of .bin file
+  178 309A:D0 **        		BNE .11			; $309F
+  179 309C:4C ** **     		JMP Done		; $314F
+  180                   
+  181                   ; $309F
+  182 309F:C9 01        .11		CMP #ORIGIN		; Receive load address (1)
+  183 30A1:D0 **        		BNE .12			; $30AC
+  184 30A3:20 ** **     		JSR ReadWord ; Read address from parallel port to X 
+  185 30A6:86 00        		STX sysptr+LO
+  186 30A8:85 01        		STA sysptr+HI
+  187 30AA:80 E9        		BRA Download	; $3095
+  188                   
+  189                   ; $30AC
+  190 30AC:C9 02        .12		CMP #DATA		; Load data of max 1-255 bytes (2)
+  191 30AE:D0 **        		BNE .13
+  192 30B0:20 ** **     		JSR ReadByte	; Read byte from parallel port 
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    5
+                                                        18:09:42  
 
-  175 309A:D0 **        		BNE .11			; $309F
-  176 309C:4C ** **     		JMP Done		; $314F
-  177                   
-  178                   ; $309F
-  179 309F:C9 01        .11		CMP #ORIGIN		; Receive load address (1)
-  180 30A1:D0 **        		BNE .12			; $30AC
-  181 30A3:20 ** **     		JSR ReadAddress ; Read address from parallel port to
-  182 30A6:86 00        		STX dest
-  183 30A8:85 01        		STA dest+1
-  184 30AA:80 E9        		BRA Download	; $3095
-  185                   
-  186                   ; $30AC
-  187 30AC:C9 02        .12		CMP #DATA		; Load data of max 1-255 bytes (2)
-  188 30AE:D0 **        		BNE .13
-  189 30B0:20 ** **     		JSR ReadByte	; Read byte from parallel port 
-  190 30B3:20 ** **     		JSR ReadByte	; and another one, discarding first (po
-  191 30B6:A8           		TAY
-  192 30B7:20 ** **     		JSR ReadRange	; Read Y number of bytes and store in 
-  193 30BA:80 D9        		BRA Download
-  194                   
-  195 30BC:C9 03        .13		CMP #RUN_ADDRESS	; Receive run address (3)
-  196 30BE:D0 **        		BNE .14			; $30CB
-  197 30C0:20 ** **     		JSR ReadAddress ; Read two bytes to X and A
-  198 30C3:8E 01 02     		STX RunAddr		; Store in a special place
-  199 30C6:8D 02 02     		STA RunAddr+1
-  200 30C9:80 CA        		BRA Download
-  201                   
-  202                   ; 30CB
-  203 30CB:C9 10        .14		CMP #REGISTER	; Read registers from Amiga/PC
-  204 30CD:D0 **        		BNE .15			; 
-  205 30CF:A9 03        		LDA #<SaveA		; #$03 Store $0203 as address in $00, $
-  206 30D1:85 00        		STA dest
-  207 30D3:A9 02        		LDA #>SaveA		; #$02
-  208 30D5:85 01        		STA dest+1
-  209 30D7:A0 07        		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
-  210 30D9:20 ** **     		JSR ReadHoward
-  211 30DC:80 B7        		BRA Download
-  212                   
-  213                   ; $30DE
-  214 30DE:C9 11        .15		CMP #FILL_MEM	; Fill Range with value: 11 Value L
-  215 30E0:D0 **        		BNE .27			; $311E
-  216 30E2:20 ** **     		JSR ReadByte	; Read fill value
-  217 30E5:48           		PHA
-  218 30E6:20 ** **     		JSR ReadAddress	; Read destination address
-  219 30E9:86 00        		STX dest
-  220 30EB:85 01        		STA dest+1
-  221 30ED:20 ** **     		JSR ReadByte	; Read count #3295
-  222 30F0:A8           		TAY
-  223 30F1:AD 20 02     		LDA HowardEnabled	; Is Howard board enabled?
-  224 30F4:D0 19        		BNE $310F
-  225 30F6:20 78 32     		JSR $3278		; Remap memory address
-  226 30F9:68           		PLA
-  227                   ; $30FA
-  228 30FA:92 02        .20		STA (dest_old)	; Store at remapped address
-  229 30FC:E6 02        		INC dest_old
-  230 30FE:D0 **        		BNE .21
-  231 3100:64 00        		STZ dest
-  232 3102:E6 01        		INC dest+1
-  233 3104:48           		PHA				; Crossing page boundary, so remap
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    5
-                                                        01:11:41  
-
-  234                   ; $3105
-  235 3105:20 78 32     		JSR $3278
-  236 3108:68           		PLA				; Restore fill value 
-  237                   ; $3109
+  193 30B3:20 ** **     		JSR ReadByte	; and another one, discarding first (po
+  194 30B6:A8           		TAY
+  195 30B7:20 ** **     		JSR ReadRange	; Read Y number of bytes and store in 
+  196 30BA:80 D9        		BRA Download
+  197                   
+  198 30BC:C9 03        .13		CMP #RUN_ADDRESS	; Receive run address (3)
+  199 30BE:D0 **        		BNE .14			; $30CB
+  200 30C0:20 ** **     		JSR ReadWord ; Read two bytes to X and A
+  201 30C3:8E 01 02     		STX RunAddr		; Store in a special place
+  202 30C6:8D 02 02     		STA RunAddr+1
+  203 30C9:80 CA        		BRA Download
+  204                   
+  205                   ; 30CB
+  206 30CB:C9 10        .14		CMP #REGISTER	; Read registers from Amiga/PC
+  207 30CD:D0 **        		BNE .15			; 
+  208 30CF:A9 03        		LDA #<SaveA		; #$03 Store $0203 as address in $00, $
+  209 30D1:85 00        		STA sysptr+LO
+  210 30D3:A9 02        		LDA #>SaveA		; #$02
+  211 30D5:85 01        		STA sysptr+HI
+  212 30D7:A0 07        		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
+  213 30D9:20 ** **     		JSR ReadHoward
+  214 30DC:80 B7        		BRA Download
+  215                   
+  216                   ; $30DE
+  217 30DE:C9 11        .15		CMP #FILL_MEM	; Fill Range with value: 11 Value L
+  218 30E0:D0 **        		BNE .16			; $311E
+  219 30E2:20 ** **     		JSR ReadByte	; Read fill value
+  220 30E5:48           		PHA
+  221 30E6:20 ** **     		JSR ReadWord	; Read destination address
+  222 30E9:86 00        		STX sysptr+LO
+  223 30EB:85 01        		STA sysptr+HI
+  224 30ED:20 ** **     		JSR ReadByte	; Read count #3295
+  225 30F0:A8           		TAY
+  226 30F1:AD 20 02     		LDA HowardEnabled	; Is Howard board enabled?
+  227 30F4:D0 **        		BNE .28
+  228 30F6:20 78 32     		JSR $3278		; Remap memory address
+  229 30F9:68           		PLA
+  230 30FA:92 02        .20		STA (sysptr2+LO)	; Store at remapped address
+  231 30FC:E6 02        		INC sysptr2+LO
+  232 30FE:D0 **        		BNE .21
+  233 3100:64 00        		STZ sysptr+LO
+  234 3102:E6 01        		INC sysptr+HI
+  235 3104:48           		PHA				; Crossing page boundary, so remap
+  236 3105:20 78 32     		JSR $3278
+  237 3108:68           		PLA				; Restore fill value 
   238 3109:88           .21		DEY
   239 310A:D0 EE        		BNE .20
   240 310C:4C 95 30     		JMP Download
   241                   
   242                   ; $310F	Read when Howard board is enabled?
-  243 310F:68           		PLA				; Restore fill value
-  244 3110:             .23
-  245 3110:92 00        		STA (dest)		; Addresses when Howard is visible are u
-  246 3112:E6 00        		INC dest
-  247 3114:D0 **        		BNE .22
-  248 3116:E6 01        		INC dest+1
-  249                   
-  250 3118:88           .22		DEY
-  251 3119:D0 F5        		BNE .23
-  252 311B:4C 95 30     		JMP Download
-  253                   
-  254                   ; $311E
-  255 311E:             .27
-  256 311E:C9 13        		CMP #BUS_MONITOR
-  257 3120:D0 **        		BNE .24			; $3132
-  258 3122:A9 0A        		LDA #<SaveBusMonitor
-  259 3124:85 00        		STA dest
-  260 3126:A9 02        		LDA #>SaveBusMonitor
-  261 3128:85 01        		STA dest+1
-  262 312A:A0 10        		LDY #MONITOR_BYTECOUNT
-  263 312C:20 ** **     		JSR ReadHoward	; $31EB
-  264 312F:4C 95 30     		JMP Download
-  265                   
-  266                   ; $3132
-  267 3132:C9 12        .24		CMP #LARGE_DATA
-  268 3134:D0 **        		BNE .25			; $313F
-  269 3136:20 ** **     		JSR ReadAddress		; Read length
-  270 3139:20 FA 31     		JSR $31FA			; Handle large data routine
-  271 313C:4C 95 30     		JMP Download
-  272                   
-  273                   ; 313F
-  274 313F:C9 1A        .25		CMP #ROM
-  275 3141:D0 **        		BNE .26			; $314C
-  276 3143:20 F9 32     		JSR $32F9
-  277 3146:20 ** **     		JSR DownloadROM
-  278 3149:4C 95 30     		JMP Download
-  279                   ; $314C
-  280 314C:             .26
-  281 314C:4C 95 30     		JMP Download
-  282                   ; $314F
-  283 314F:             Done
-  284 314F:60           		RTS
-  285                   
-  286                   ; $3150
-  287 3150:             Upload
-  288 3150:20 ** **     .30		JSR ReadByte
-  289 3153:C9 00        		CMP #END_OF_FILE
-  290 3155:D0 **        		BNE .31			; $315A
-  291 3157:4C ** **     		JMP UploadDone	; $31C3
-  292                   
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    6
-                                                        01:11:41  
+  243 310F:             .28
+  244 310F:68           		PLA				; Restore fill value
+  245 3110:             .23
+  246 3110:92 00        		STA (sysptr+LO)		; Addresses when Howard is visible 
+  247 3112:E6 00        		INC sysptr+LO
+  248 3114:D0 **        		BNE .22
+  249 3116:E6 01        		INC sysptr+HI
+  250                   
+  251 3118:88           .22		DEY
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    6
+                                                        18:09:42  
 
-  293                   ; $315A
-  294 315A:C9 01        .31		CMP #ORIGIN
-  295 315C:D0 **        		BNE .32			; $3167
-  296 315E:20 ** **     		JSR ReadAddress
-  297 3161:86 00        		STX dest
-  298 3163:85 01        		STA dest+1
-  299 3165:80 E9        		BRA .30			; $3150
-  300                   
-  301                   ; $3167
-  302 3167:C9 02        .32		CMP #DATA
-  303 3169:D0 **        		BNE .33			; $3191
-  304 316B:20 ** **     		JSR ReadByte
-  305 316E:A8           		TAY
-  306 316F:A5 00        		LDA dest
-  307 3171:85 04        		STA dest_old2
-  308 3173:A5 01        		LDA dest+1
-  309 3175:85 05        		STA dest_old2+1
-  310 3177:20 ** **     		JSR BeginUpload
-  311 317A:A9 02        		LDA #$02
-  312 317C:20 ** **     		JSR WriteByte
-  313 317F:AD 1E 02     		LDA $021E		; Similar to $FBB9 in monitor.src (versio
-  314 3182:20 ** **     		JSR WriteByte
-  315 3185:98           		TYA
-  316 3186:20 ** **     		JSR WriteByte	; Length
-  317 3189:20 39 32     		JSR $3239
-  318 318C:20 ** **     		JSR EndUpload
-  319 318F:80 BF        		BRA .30
-  320                   
-  321                   ; $3191
-  322 3191:C9 10        .33		CMP #REGISTER
-  323 3193:D0 **        		BNE .34			; $31AF
-  324 3195:A9 03        		LDA #<REGISTERS
-  325 3197:85 00        		STA dest
-  326 3199:A9 02        		LDA #>REGISTERS
-  327 319B:85 01        		STA dest+1
-  328 319D:A0 07        		LDY #REGISTER_BYTECOUNT
-  329 319F:20 ** **     		JSR BeginUpload
-  330 31A2:A9 10        		LDA #REGISTER
-  331 31A4:20 ** **     		JSR WriteByte
-  332 31A7:20 5A 32     		JSR $325A		; WriteRangeCore
-  333 31AA:20 ** **     		JSR EndUpload
-  334 31AD:80 A1        		BRA Upload
-  335                   
-  336                   ; $31AF
-  337 31AF:C9 14        .34		CMP #TRACE		; #$14
-  338 31B1:D0 **        		BNE .35			; $31B5
-  339 31B3:80 9B        		BRA Upload
-  340                   
-  341                   ; $31B5
-  342 31B5:C9 1A        .35		CMP #ROM
-  343 31B7:D0 **        		BNE .36			; $31C1
-  344 31B9:20 F9 32     		JSR $32F9
-  345 31BC:20 ** **     		JSR UploadROM
-  346 31BF:80 8F        		BRA Upload
-  347                   
-  348                   ; $31C1
-  349 31C1:             .36						; Unrecognized upload type
-  350 31C1:80 8D        		BRA Upload
-  351                   
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    7
-                                                        01:11:41  
+  252 3119:D0 F5        		BNE .23
+  253 311B:4C 95 30     		JMP Download
+  254                   
+  255                   ; $311E
+  256 311E:             .16
+  257 311E:C9 13        		CMP #BUS_MONITOR
+  258 3120:D0 **        		BNE .17			; $3132
+  259 3122:A9 0A        		LDA #<SaveBusMonitor
+  260 3124:85 00        		STA sysptr+LO
+  261 3126:A9 02        		LDA #>SaveBusMonitor
+  262 3128:85 01        		STA sysptr+HI
+  263 312A:A0 10        		LDY #MONITOR_BYTECOUNT
+  264 312C:20 ** **     		JSR ReadHoward	; $31EB
+  265 312F:4C 95 30     		JMP Download
+  266                   
+  267                   ; $3132
+  268 3132:C9 12        .17		CMP #LARGE_DATA
+  269 3134:D0 **        		BNE .18			; $313F
+  270 3136:20 ** **     		JSR ReadWord		; Read length
+  271 3139:20 FA 31     		JSR $31FA			; Handle large data routine
+  272 313C:4C 95 30     		JMP Download
+  273                   
+  274                   ; 313F
+  275 313F:C9 1A        .18		CMP #ROM
+  276 3141:D0 **        		BNE .19			; $314C
+  277 3143:20 F9 32     		JSR $32F9
+  278 3146:20 ** **     		JSR DownloadROM
+  279 3149:4C 95 30     		JMP Download
+  280                   ; $314C
+  281 314C:             .19
+  282 314C:4C 95 30     		JMP Download
+  283                   ; $314F
+  284 314F:             Done
+  285 314F:60           		RTS
+  286                   
+  287                   ; $3150
+  288 3150:             Upload
+  289 3150:20 ** **     .30		JSR ReadByte
+  290 3153:C9 00        		CMP #END_OF_FILE
+  291 3155:D0 **        		BNE .31			; $315A
+  292 3157:4C ** **     		JMP UploadDone	; $31C3
+  293                   
+  294                   ; $315A
+  295 315A:C9 01        .31		CMP #ORIGIN
+  296 315C:D0 **        		BNE .32			; $3167
+  297 315E:20 ** **     		JSR ReadWord
+  298 3161:86 00        		STX sysptr+LO
+  299 3163:85 01        		STA sysptr+HI
+  300 3165:80 E9        		BRA .30			; $3150
+  301                   
+  302                   ; $3167
+  303 3167:C9 02        .32		CMP #DATA
+  304 3169:D0 **        		BNE .33			; $3191
+  305 316B:20 ** **     		JSR ReadByte
+  306 316E:A8           		TAY
+  307 316F:A5 00        		LDA sysptr+LO
+  308 3171:85 04        		STA sysptr3+LO
+  309 3173:A5 01        		LDA sysptr+HI
+  310 3175:85 05        		STA sysptr3+HI
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    7
+                                                        18:09:42  
 
-  352                   ; $31C3
-  353 31C3:             UploadDone
-  354 31C3:60           		RTS 
-  355                   
-  356                   ; $31C4
-  357 31C4:             ReadAddress
-  358 31C4:20 ** **     		JSR ReadByte
-  359 31C7:AA           		TAX
-  360 31C8:4C ** **     		JMP ReadByte
-  361                   
-  362                   ; $31CB
-  363 31CB:             ReadRange
-  364 31CB:AD 20 02     		LDA HowardEnabled
-  365 31CE:D0 **        		BNE ReadHoward
-  366 31D0:20 78 32     		JSR $3278
-  367                   ; $31D3
-  368 31D3:             .38
-  369 31D3:20 ** **     		JSR ReadByte
-  370 31D6:92 02        		STA ($02)
-  371 31D8:E6 02        		INC $02
-  372 31DA:D0 **        		BNE .37			; $31E3
-  373 31DC:64 00        		STZ dest
-  374 31DE:E6 01        		INC dest+1
-  375 31E0:20 78 32     		JSR $3278
-  376                   
-  377                   ; $31E3
-  378 31E3:88           .37		DEY
-  379 31E4:D0 ED        		BNE .38			; $31D3
-  380 31E6:A5 02        		LDA $02
-  381 31E8:85 00        		STA $00
-  382 31EA:60           		RTS
-  383                   
-  384                   ; $31EB
-  385 31EB:             ReadHoward	; Register Y is number of bytes to read
-  386 31EB:20 ** **     .39		JSR ReadByte
-  387 31EE:92 00        		STA (dest)
-  388 31F0:E6 00        		INC dest
-  389 31F2:D0 **        		BNE .3A			; $31F6
-  390 31F4:E6 01        		INC dest+1
-  391                   ; $31F6
-  392 31F6:88           .3A		DEY
-  393 31F7:D0 F2        		BNE .39			; $31EB
-  394 31F9:60           		RTS
-  395                   
-  396                   ; $31FA
-  397                   ; Large data handling routine
-  398 31FA:AC 20 02     		LDY HowardEnabled
-  399 31FD:D0 **        		BNE .43			; $3222
-  400                   
-  401 31FF:A8           		TAY
-  402 3200:8A           		TXA
-  403 3201:F0 **        		BEQ .40			; $3204
-  404 3203:C8           		INY
-  405 3204:20 78 32     .40		JSR $3278
-  406 3207:20 ** **     .41		JSR ReadByte
-  407 320A:92 02        		STA ($02)
-  408 320C:E6 02        		INC $02
-  409 320E:D0 **        		BNE .42			; $3217
-  410 3210:64 00        		STZ $00
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    8
-                                                        01:11:41  
+  311 3177:20 ** **     		JSR BeginUpload
+  312 317A:A9 02        		LDA #DATA
+  313 317C:20 ** **     		JSR WriteByte
+  314 317F:AD 1E 02     		LDA $021E		; Similar to $FBB9 in monitor.src (versio
+  315 3182:20 ** **     		JSR WriteByte
+  316 3185:98           		TYA
+  317 3186:20 ** **     		JSR WriteByte	; Length
+  318 3189:20 ** **     		JSR WriteRange
+  319 318C:20 ** **     		JSR EndUpload
+  320 318F:80 BF        		BRA .30
+  321                   
+  322                   ; $3191
+  323 3191:C9 10        .33		CMP #REGISTER
+  324 3193:D0 **        		BNE .34			; $31AF
+  325 3195:A9 03        		LDA #<REGISTERS
+  326 3197:85 00        		STA sysptr+LO
+  327 3199:A9 02        		LDA #>REGISTERS
+  328 319B:85 01        		STA sysptr+HI
+  329 319D:A0 07        		LDY #REGISTER_BYTECOUNT
+  330 319F:20 ** **     		JSR BeginUpload
+  331 31A2:A9 10        		LDA #REGISTER
+  332 31A4:20 ** **     		JSR WriteByte
+  333 31A7:20 5A 32     		JSR $325A		; WriteRangeCore
+  334 31AA:20 ** **     		JSR EndUpload
+  335 31AD:80 A1        		BRA Upload
+  336                   
+  337                   ; $31AF
+  338 31AF:C9 14        .34		CMP #TRACE		; #$14
+  339 31B1:D0 **        		BNE .35			; $31B5
+  340 31B3:80 9B        		BRA Upload
+  341                   
+  342                   ; $31B5
+  343 31B5:C9 1A        .35		CMP #ROM
+  344 31B7:D0 **        		BNE .36			; $31C1
+  345 31B9:20 F9 32     		JSR $32F9
+  346 31BC:20 ** **     		JSR UploadROM
+  347 31BF:80 8F        		BRA Upload
+  348                   
+  349                   ; $31C1
+  350 31C1:             .36						; Unrecognized upload type
+  351 31C1:80 8D        		BRA Upload
+  352                   
+  353                   ; $31C3
+  354 31C3:             UploadDone
+  355 31C3:60           		RTS
+  356                   
+  357                   ; $31C4
+  358 31C4:             ReadWord
+  359 31C4:20 ** **     		JSR ReadByte
+  360 31C7:AA           		TAX
+  361 31C8:4C ** **     		JMP ReadByte
+  362                   
+  363                   ; $31CB
+  364 31CB:             ReadRange
+  365 31CB:AD 20 02     		LDA HowardEnabled
+  366 31CE:D0 **        		BNE ReadHoward
+  367 31D0:20 78 32     		JSR $3278
+  368 31D3:20 ** **     .38		JSR ReadByte
+  369 31D6:92 02        		STA (sysptr2+LO)
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    8
+                                                        18:09:42  
 
-  411 3212:E6 01        		INC $01
-  412 3214:20 78 32     		JSR $3278
-  413                   ; $3217
-  414 3217:CA           .42		DEX
-  415 3218:D0 ED        		BNE .41			; $3207
-  416 321A:88           		DEY
-  417 321B:D0 EA        		BNE .41			; $3207
-  418 321D:A5 02        		LDA $02
-  419 321F:85 00        		STA $00
-  420 3221:60           		RTS
-  421                   
-  422                   ; $3222		Howard board is enabled
-  423 3222:A8           .43		TAY
-  424 3223:8A           		TXA
-  425 3224:F0 **        		BEQ .44			; $3227
-  426 3226:C8           		INY
-  427 3227:20 ** **     .44		JSR ReadByte
-  428 322A:92 00        		STA (dest)
-  429 322C:E6 00        		INC dest
-  430 322E:D0 **        		BNE .45
-  431 3230:E6 01        		INC dest+1
-  432 3232:CA           .45		DEX
-  433 3233:D0 F2        		BNE .44			; $3227
-  434 3235:88           		DEY
-  435 3236:D0 EF        		BNE .44			; $3227
-  436 3238:60           		RTS
-  437                   
-  438                   ; $3239
-  439 3239:             WriteRange
-  440 3239:AD 20 02     		LDA HowardEnabled
-  441 323C:D0 1C        		BNE $325A
-  442 323E:20 78 32     		JSR $3278		; Memory switch
-  443                   ; $3241
-  444 3241:20 E3 32     		JSR $32E3
-  445 3244:20 ** **     		JSR WriteByte
-  446 3247:E6 02        		INC $02
-  447 3249:D0 07        		BNE $3252
-  448 324B:64 00        		STZ dest
-  449 324D:E6 01        		INC dest+1
-  450 324F:20 78 32     		JSR $3278		; Memory switch
-  451                   ; $3252
-  452 3252:88           		DEY
-  453 3253:D0 EC        		BNE $3241
-  454 3255:A5 02        		LDA dest_old
-  455 3257:85 00        		STA dest
-  456 3259:60           		RTS
-  457                   
-  458                   ; $325A
-  459 325A:A5 00        		LDA dest
-  460 325C:85 02        		STA $02
-  461 325E:A5 01        		LDA dest+1
-  462 3260:85 03        		STA $03
-  463 3262:20 E3 32     		JSR $32E3
-  464 3265:20 ** **     		JSR WriteByte
-  465 3268:E6 02        		INC $02
-  466 326A:D0 04        		BNE $3270
-  467                   
-  468 326C:E6 03        		INC $03
-  469 326E:E6 01        		INC dest+1
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page    9
-                                                        01:11:41  
+  370 31D8:E6 02        		INC sysptr2+LO
+  371 31DA:D0 **        		BNE .37			; $31E3
+  372 31DC:64 00        		STZ sysptr+LO
+  373 31DE:E6 01        		INC sysptr+HI
+  374 31E0:20 78 32     		JSR $3278
+  375 31E3:88           .37		DEY
+  376 31E4:D0 ED        		BNE .38
+  377 31E6:A5 02        		LDA sysptr2+LO
+  378 31E8:85 00        		STA sysptr+LO
+  379 31EA:60           		RTS
+  380                   
+  381                   ; $31EB
+  382 31EB:             ReadHoward	; Register Y is number of bytes to read
+  383 31EB:20 ** **     .39		JSR ReadByte
+  384 31EE:92 00        		STA (sysptr+LO)
+  385 31F0:E6 00        		INC sysptr+LO
+  386 31F2:D0 **        		BNE .3A			; $31F6
+  387 31F4:E6 01        		INC sysptr+HI
+  388                   ; $31F6
+  389 31F6:88           .3A		DEY
+  390 31F7:D0 F2        		BNE .39			; $31EB
+  391 31F9:60           		RTS
+  392                   
+  393                   ; $31FA
+  394                   ; Large data handling routine
+  395 31FA:AC 20 02     		LDY HowardEnabled
+  396 31FD:D0 **        		BNE .43			; $3222
+  397                   
+  398 31FF:A8           		TAY
+  399 3200:8A           		TXA
+  400 3201:F0 **        		BEQ .40			; $3204
+  401 3203:C8           		INY
+  402 3204:20 78 32     .40		JSR $3278
+  403 3207:20 ** **     .41		JSR ReadByte
+  404 320A:92 02        		STA (sysptr2+LO)
+  405 320C:E6 02        		INC sysptr2+LO
+  406 320E:D0 **        		BNE .42			; $3217
+  407 3210:64 00        		STZ sysptr+LO
+  408 3212:E6 01        		INC sysptr+HI
+  409 3214:20 78 32     		JSR $3278
+  410                   ; $3217
+  411 3217:CA           .42		DEX
+  412 3218:D0 ED        		BNE .41			; $3207
+  413 321A:88           		DEY
+  414 321B:D0 EA        		BNE .41			; $3207
+  415 321D:A5 02        		LDA sysptr2+LO
+  416 321F:85 00        		STA sysptr+LO
+  417 3221:60           		RTS
+  418                   
+  419                   ; $3222		Howard board is enabled
+  420 3222:A8           .43		TAY
+  421 3223:8A           		TXA
+  422 3224:F0 **        		BEQ .44			; $3227
+  423 3226:C8           		INY
+  424 3227:20 ** **     .44		JSR ReadByte
+  425 322A:92 00        		STA (sysptr+LO)
+  426 322C:E6 00        		INC sysptr+LO
+  427 322E:D0 **        		BNE .45
+  428 3230:E6 01        		INC sysptr+HI
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page    9
+                                                        18:09:42  
 
-  470                   ; $3270
-  471 3270:88           		DEY
-  472 3271:D0 EF        		BNE $3262
-  473 3273:A5 02        		LDA $02
-  474 3275:85 00        		STA dest
-  475 3277:60           		RTS
-  476                   
-  477                   ; $3278
-  478                   ; Memory mapping function from dest to dest_old
-  479 3278:A5 00        		LDA dest
-  480 327A:85 02        		STA dest_old
-  481 327C:A5 01        		LDA dest+1
-  482 327E:30 12        		BMI $3292		; Normal memory for $8000 and higher
-  483 3280:C9 40        		CMP #$40
-  484 3282:B0 0B        		BCS $328F		; Skip when dest+1 is $40-$7F
-  485 3284:5A           		PHY
-  486 3285:A0 01        		LDY #$01
-  487 3287:8C E0 15     		STY SEGWR		; Remap $0000-$3FFF to $4000-$7FFF in Han
-  488 328A:7A           		PLY
-  489 328B:09 40        		ORA #$40		; Adjust address to range
-  490 328D:80 03        		BRA $3292
-  491                   ; $328F
-  492 328F:9C E0 15     		STZ SEGWR		; No remapping of Handy RAM
-  493                   ; $3292
-  494 3292:85 03        		STA dest_old+1
-  495 3294:60           		RTS
-  496                   
-  497                   ; $3295
-  498 3295:             ReadByte
-  499 3295:AD 80 15     		LDA $1580
-  500 3298:10 FB        		BPL ReadByte
-  501 329A:AD 81 15     		LDA $1581
-  502 329D:60           		RTS
-  503                   
-  504                   ; $329E
-  505 329E:             WriteByte
-  506 329E:48           		PHA
-  507 329F:AD 80 15     		LDA $1580
-  508 32A2:10 FB        		BPL $329F
-  509 32A4:68           		PLA
-  510 32A5:8D 81 15     		STA $1581
-  511 32A8:60           		RTS
-  512                   
-  513                   ; $32A9
-  514 32A9:             BeginUpload
-  515 32A9:AD 80 15     		LDA $1580
-  516 32AC:29 40        		AND #$40
-  517 32AE:F0 F9        		BEQ BeginUpload
-  518 32B0:9C 82 15     		STZ $1582
-  519 32B3:A9 80        		LDA #$80
-  520 32B5:8D 83 15     		STA $1583
-  521 32B8:60           		RTS
-  522                   
-  523                   ; $32B9
-  524 32B9:             EndUpload
-  525 32B9:AD 80 15     		LDA $1580
-  526 32BC:10 FB        		BPL EndUpload
-  527 32BE:A9 80        		LDA #$80
-  528 32C0:8D 82 15     		STA $1582
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page   10
-                                                        01:11:41  
+  429 3232:CA           .45		DEX
+  430 3233:D0 F2        		BNE .44			; $3227
+  431 3235:88           		DEY
+  432 3236:D0 EF        		BNE .44			; $3227
+  433 3238:60           		RTS
+  434                   
+  435                   ; $3239
+  436 3239:             WriteRange
+  437 3239:AD 20 02     		LDA HowardEnabled
+  438 323C:D0 1C        		BNE $325A
+  439 323E:20 78 32     		JSR $3278		; Memory switch
+  440                   ; $3241
+  441 3241:20 E3 32     .50		JSR $32E3
+  442 3244:20 ** **     		JSR WriteByte
+  443 3247:E6 02        		INC sysptr2+LO
+  444 3249:D0 **        		BNE .51			; $3252
+  445 324B:64 00        		STZ sysptr+LO
+  446 324D:E6 01        		INC sysptr+HI
+  447 324F:20 78 32     		JSR $3278		; Memory switch
+  448                   ; $3252
+  449 3252:88           .51		DEY
+  450 3253:D0 EC        		BNE .50			; $3241
+  451 3255:A5 02        		LDA sysptr2+LO
+  452 3257:85 00        		STA sysptr+LO
+  453 3259:60           		RTS
+  454                   
+  455                   ; $325A
+  456 325A:             WriteRangeCore
+  457 325A:A5 00        		LDA sysptr+LO
+  458 325C:85 02        		STA sysptr2+LO
+  459 325E:A5 01        		LDA sysptr+HI
+  460 3260:85 03        		STA sysptr2+HI
+  461 3262:20 E3 32     .53		JSR $32E3
+  462 3265:20 ** **     		JSR WriteByte
+  463 3268:E6 02        		INC sysptr2+LO
+  464 326A:D0 **        		BNE .52			; $3270
+  465 326C:E6 03        		INC sysptr2+HI
+  466 326E:E6 01        		INC sysptr+HI
+  467                   ; $3270
+  468 3270:88           .52		DEY
+  469 3271:D0 EF        		BNE .53			; $3262
+  470 3273:A5 02        		LDA sysptr2+LO
+  471 3275:85 00        		STA sysptr+LO
+  472 3277:60           		RTS
+  473                   
+  474                   ; $3278
+  475                   ; Memory mapping function from sysptr to sysptr2
+  476 3278:A5 00        		LDA sysptr+LO
+  477 327A:85 02        		STA sysptr2+LO
+  478 327C:A5 01        		LDA sysptr+HI
+  479 327E:30 **        		BMI .55			; $3292		; Normal memory for $8000 and hig
+  480 3280:C9 40        		CMP #$40
+  481 3282:B0 **        		BCS .54		; Skip when sysptr+HI is $40-$7F
+  482 3284:5A           		PHY
+  483 3285:A0 01        		LDY #SEG
+  484 3287:8C E0 15     		STY SEGWR		; Remap $0000-$3FFF to $4000-$7FFF in Han
+  485 328A:7A           		PLY
+  486 328B:09 40        		ORA #$40		; Adjust address to range
+  487 328D:80 **        		BRA .55
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page   10
+                                                        18:09:42  
 
-  529 32C3:9C 83 15     		STZ $1583
-  530 32C6:60           		RTS
-  531                   
-  532                   ; $32C7
-  533 32C7:             InitComm
-  534 32C7:48           		PHA
-  535 32C8:AD 80 15     		LDA $1580
-  536 32CB:29 40        		AND #$40
-  537 32CD:D0 F9        		BNE $32C8
-  538 32CF:A9 80        		LDA #$80
-  539 32D1:8D 82 15     		STA $1582
-  540 32D4:8D 83 15     		STA $1583
-  541                   ; $32D7
-  542 32D7:AD 80 15     		LDA $1580
-  543 32DA:29 40        		AND #$40
-  544 32DC:F0 F9        		BEQ $32D7
-  545 32DE:9C 83 15     		STZ $1583
-  546 32E1:68           		PLA
-  547 32E2:60           		RTS
-  548                   
-  549                   ; $32E3
-  550 32E3:             ReadMemory
-  551 32E3:AD 00 02     		LDA $0200
-  552 32E6:D0 0E        		BNE $32F6
-  553 32E8:A5 03        		LDA $03
-  554 32EA:C9 FC        		CMP #$FC		; Memory range below $FC00
-  555 32EC:D0 08        		BNE $32F6
-  556 32EE:A5 02        		LDA $02			; 
-  557 32F0:10 06        		BPL $32F8
-  558 32F2:C9 84        		CMP #$84		; Do nothing for $FC84 and below (Unalloca
-  559 32F4:90 02        		BCC $32F8
-  560                   ; $32F6
-  561 32F6:B2 02        		LDA ($02)
-  562 32F8:60           		RTS
-  563                   
-  564                   
-  565                   ; $15D0-$15D2: ROM configuration (address, size parame
-  566                   ; $15D3: ROM bank/page control register
-  567                   ; $15E0: bank switching?
-  568                   
-  569                   
-  570                   ; $32F9					; Prepares ROM access
-  571 32F9:20 C4 31     		JSR ReadAddress
-  572 32FC:8E D0 15     		STX LDRADD		; $15D0
-  573 32FF:8D D1 15     		STA LDRADD+1	; $15D1
-  574 3302:20 95 32     		JSR ReadByte
-  575 3305:8D D2 15     		STA LDRADD+2	; $15D2		20-bit address for cartridge
-  576 3308:20 95 32     		JSR ReadByte	; Length to read LSB first to MSB last
-  577 330B:49 FF        		EOR #$FF		; EXOR'ed to count up
-  578 330D:8D 21 02     		STA $0221		
-  579 3310:20 95 32     		JSR ReadByte
-  580 3313:49 FF        		EOR #$FF
-  581 3315:8D 22 02     		STA $0222
-  582 3318:20 95 32     		JSR ReadByte	; MSB of address
-  583 331B:49 FF        		EOR #$FF
-  584 331D:8D 23 02     		STA $0223
-  585 3320:20 95 32     		JSR ReadByte	; ???
-  586 3323:AA           		TAX
-  587 3324:30 **        		BMI .80
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page   11
-                                                        01:11:41  
+  488                   ; $328F
+  489 328F:             .54
+  490 328F:9C E0 15     		STZ SEGWR		; No remapping of Handy RAM
+  491                   ; $3292
+  492 3292:85 03        .55		STA sysptr2+HI
+  493 3294:60           		RTS
+  494                   
+  495                   ; $3295
+  496 3295:             ReadByte
+  497 3295:AD 80 15     		LDA PORT_STATUS
+  498 3298:10 FB        		BPL ReadByte	; "When receiving data, DATA AVAILABLE 
+  499 329A:AD 81 15     		LDA {PORT_DATA}
+  500 329D:60           		RTS
+  501                   
+  502                   ; $329E
+  503 329E:             WriteByte
+  504 329E:48           		PHA
+  505 329F:AD 80 15     		LDA PORT_STATUS
+  506 32A2:10 FB        		BPL $329F		; "When sending data, DATA AVAILABLE goes
+  507 32A4:68           		PLA
+  508 32A5:8D 81 15     		STA PORT_DATA
+  509 32A8:60           		RTS
+  510                   
+  511                   ; $32A9
+  512 32A9:             BeginUpload
+  513 32A9:AD 80 15     		LDA PORT_STATUS
+  514 32AC:29 40        		AND #BUSY
+  515 32AE:F0 F9        		BEQ BeginUpload
+  516 32B0:9C 82 15     		STZ PORT_DIRECTION	; Port direction to output
+  517 32B3:A9 80        		LDA #POUT
+  518 32B5:8D 83 15     		STA PORT_POUT		; Pout on?
+  519 32B8:60           		RTS
+  520                   
+  521                   ; $32B9
+  522 32B9:             EndUpload
+  523 32B9:AD 80 15     		LDA PORT_STATUS
+  524 32BC:10 FB        		BPL EndUpload
+  525 32BE:A9 80        		LDA #DIRECTION_INPUT
+  526 32C0:8D 82 15     		STA PORT_DIRECTION
+  527 32C3:9C 83 15     		STZ PORT_POUT		; Pout off? 
+  528 32C6:60           		RTS
+  529                   
+  530                   ; $32C7
+  531 32C7:             InitComm
+  532 32C7:48           		PHA
+  533 32C8:AD 80 15     		LDA $1580
+  534 32CB:29 40        		AND #$40
+  535 32CD:D0 F9        		BNE $32C8
+  536 32CF:A9 80        		LDA #$80
+  537 32D1:8D 82 15     		STA $1582
+  538 32D4:8D 83 15     		STA $1583
+  539                   ; $32D7
+  540 32D7:AD 80 15     		LDA $1580
+  541 32DA:29 40        		AND #$40
+  542 32DC:F0 F9        		BEQ $32D7
+  543 32DE:9C 83 15     		STZ $1583
+  544 32E1:68           		PLA
+  545 32E2:60           		RTS
+  546                   
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page   11
+                                                        18:09:42  
 
-  588                   		
-  589 3326:29 07        		AND #ROM_PAGING_MASK		; Page size is 3 bits (see ROM
-  590 3328:8D 24 02     		STA $0224		; ROM primary memory paging
-  591 332B:A9 00        		LDA #<RCARTEN
-  592 332D:85 04        		STA $04
-  593 332F:A9 10        		LDA #>RCARTEN
-  594 3331:85 05        		STA $05
-  595 3333:80 **        		BRA .81
-  596                   
-  597                   ; $3335
-  598 3335:29 07        .80		AND #ROM_PAGING_MASK
-  599 3337:8D 25 02     		STA $0225		; ROM secondary memory paging
-  600 333A:A9 01        		LDA #<RCARTEN+1
-  601 333C:85 04        		STA $04
-  602 333E:A9 10        		LDA #>RCARTEN
-  603 3340:85 05        		STA $05
-  604                   
-  605                   ; $3342
-  606 3342:AD 24 02     .81		LDA $0224
-  607 3345:29 07        		AND #ROM_PAGING_MASK
-  608 3347:8D 27 02     		STA $0227		; 
-  609 334A:AD 25 02     		LDA $0225		; Secondary paging is at bits 3-5
-  610 334D:29 07        		AND #ROM_PAGING_MASK	; Mask to make sure it is withi
-  611 334F:0A           		ASL
-  612 3350:0A           		ASL
-  613 3351:0A           		ASL				; Shift to bits 3-5
-  614 3352:0D 27 02     		ORA $0227		; Combine with primary paging
-  615 3355:8D D3 15     		STA ROMPAGE		; Set resulting ROM primary and seconda
-  616 3358:8D 26 02     		STA $0226		; ROMPAGE_RAM Shadow address
-  617 335B:60           		RTS
-  618                   
-  619                   ; $335C					; Download ROM
-  620 335C:             DownloadROM
-  621 335C:9C D3 15     		STZ ROMPAGE 	; "Before accessing memory through this
-  622 335F:             .83
-  623 335F:EE 21 02     		INC $0221		; Least significant byte of address
-  624 3362:D0 **        		BNE .82			; Receive byte and write to ROM 
-  625 3364:EE 22 02     		INC $0222
-  626 3367:D0 **        		BNE .82
-  627 3369:EE 23 02     		INC $0223		; Most significant
-  628 336C:D0 **        		BNE .82		
-  629 336E:AD 26 02     		LDA $0226		; ROMPAGE_RAM
-  630 3371:8D D3 15     		STA ROMPAGE		; Restore original ROM paging, as readi
-  631 3374:60           		RTS
-  632                   		
-  633 3375:20 95 32     .82		JSR ReadByte
-  634 3378:92 04        		STA ($04)		; $04 holds write address of current ROM
-  635 337A:80 E3        		BRA .83
-  636                   
-  637                   ; $337C
-  638 337C:             UploadROM
-  639 337C:20 A9 32     		JSR BeginUpload		; Uploading of ROM content
-  640 337F:AD 20 02     		LDA HowardEnabled
-  641 3382:D0 03        		BNE $3387			; If Howard is visible, 
-  642 3384:9C D3 15     		STZ ROMPAGE			; "Before accessing memory through thi
-  643                   ; $3387
-  644 3387:             .84
-  645 3387:EE 21 02     		INC $0221			
-  646 338A:D0 **        		BNE .85
-Epyx HandyAsm 1.12      howard.src                      12-Aug-12501:11:41 Page   12
-                                                        01:11:41  
+  547                   ; $32E3
+  548 32E3:             ReadMemory
+  549 32E3:AD 00 02     		LDA $0200
+  550 32E6:D0 0E        		BNE $32F6
+  551 32E8:A5 03        		LDA sysptr2+HI
+  552 32EA:C9 FC        		CMP #>SUZY_BASE	; Memory range below Suzy ($FC00) is
+  553 32EC:D0 08        		BNE $32F6
+  554 32EE:A5 02        		LDA sysptr2+LO 
+  555 32F0:10 06        		BPL $32F8
+  556 32F2:C9 84        		CMP #$84		; Do nothing for $FC84 and below (Unalloca
+  557 32F4:90 02        		BCC $32F8
+  558                   ; $32F6
+  559 32F6:B2 02        		LDA (sysptr2+LO)
+  560                   ; $32F8
+  561 32F8:60           		RTS
+  562                   
+  563                   ; $32F9					; Prepares ROM access
+  564 32F9:20 C4 31     		JSR ReadWord
+  565 32FC:8E D0 15     		STX LDRADD		; $15D0
+  566 32FF:8D D1 15     		STA LDRADD+1	; $15D1
+  567 3302:20 95 32     		JSR ReadByte
+  568 3305:8D D2 15     		STA LDRADD+2	; $15D2		20-bit address for cartridge
+  569 3308:20 95 32     		JSR ReadByte	; Length to read LSB first to MSB last
+  570 330B:49 FF        		EOR #$FF		; EXOR'ed to count up
+  571 330D:8D 21 02     		STA CartRegister		
+  572 3310:20 95 32     		JSR ReadByte
+  573 3313:49 FF        		EOR #$FF
+  574 3315:8D 22 02     		STA CartRegister+1
+  575 3318:20 95 32     		JSR ReadByte	; MSB of address
+  576 331B:49 FF        		EOR #$FF
+  577 331D:8D 23 02     		STA CartRegister+2
+  578 3320:20 95 32     		JSR ReadByte	; ???
+  579 3323:AA           		TAX
+  580 3324:30 **        		BMI .80
+  581                   		
+  582 3326:29 07        		AND #ROM_PAGING_MASK		; Page size is 3 bits (see ROM
+  583 3328:8D 24 02     		STA $0224		; ROM primary memory paging
+  584 332B:A9 00        		LDA #<RCARTEN
+  585 332D:85 04        		STA sysptr3+LO
+  586 332F:A9 10        		LDA #>RCARTEN
+  587 3331:85 05        		STA sysptr3+HI
+  588 3333:80 **        		BRA .81
+  589                   
+  590                   ; $3335
+  591 3335:29 07        .80		AND #ROM_PAGING_MASK
+  592 3337:8D 25 02     		STA $0225		; ROM secondary memory paging
+  593 333A:A9 01        		LDA #<RCARTEN+1
+  594 333C:85 04        		STA sysptr3+LO
+  595 333E:A9 10        		LDA #>RCARTEN
+  596 3340:85 05        		STA sysptr3+HI
+  597                   
+  598                   ; $3342
+  599 3342:AD 24 02     .81		LDA $0224
+  600 3345:29 07        		AND #ROM_PAGING_MASK
+  601 3347:8D 27 02     		STA $0227 
+  602 334A:AD 25 02     		LDA $0225			; Secondary paging is at bits 3-5
+  603 334D:29 07        		AND #ROM_PAGING_MASK	; Mask to make sure it is withi
+  604 334F:0A           		ASL
+  605 3350:0A           		ASL
+Epyx HandyAsm 1.12      howard.src                      12-Aug-12518:09:42 Page   12
+                                                        18:09:42  
 
-  647 338C:EE 22 02     		INC $0222
-  648 338F:D0 **        		BNE .85
-  649 3391:EE 23 02     		INC $0223
-  650 3394:D0 **        		BNE .85
-  651 3396:AD 26 02     		LDA $0226			; ROMPAGE_RAM
-  652 3399:8D D3 15     		STA ROMPAGE
-  653 339C:20 B9 32     		JSR EndUpload
-  654 339F:60           		RTS
-  655                   
-  656                   ; $33A0
-  657 33A0:             .85
-  658 33A0:B2 04        		LDA ($04)			; 
-  659 33A2:20 9E 32     		JSR WriteByte
-  660 33A5:80 E0        		BRA .84
-  661                   
-Epyx HandyAsm 1.12      Symbols                         12-Aug-12501:11:41 Page   13
-                                                        01:11:41  
+  606 3351:0A           		ASL					; Shift to bits 3-5
+  607 3352:0D 27 02     		ORA $0227			; Combine with primary paging
+  608 3355:8D D3 15     		STA ROMPAGE			; Set resulting ROM primary and second
+  609 3358:8D 26 02     		STA ROMPAGE_RAM		; ROMPAGE_RAM Shadow address
+  610 335B:60           		RTS
+  611                   
+  612                   ; $335C
+  613 335C:             DownloadROM
+  614 335C:9C D3 15     		STZ ROMPAGE 		; "Before accessing memory through thi
+  615 335F:             .83
+  616 335F:EE 21 02     		INC CartRegister	; Least significant byte of address
+  617 3362:D0 **        		BNE .82				; Receive byte and write to ROM 
+  618 3364:EE 22 02     		INC CartRegister+1
+  619 3367:D0 **        		BNE .82
+  620 3369:EE 23 02     		INC CartRegister+2	; Most significant
+  621 336C:D0 **        		BNE .82		
+  622 336E:AD 26 02     		LDA ROMPAGE_RAM
+  623 3371:8D D3 15     		STA ROMPAGE			; Restore original ROM paging, as read
+  624 3374:60           		RTS
+  625                   		
+  626 3375:20 95 32     .82		JSR ReadByte
+  627 3378:92 04        		STA (sysptr3+LO)	; Write address of current ROM sect
+  628 337A:80 E3        		BRA .83
+  629                   
+  630                   ; $337C
+  631 337C:             UploadROM
+  632 337C:20 A9 32     		JSR BeginUpload		; Uploading of ROM content
+  633 337F:AD 20 02     		LDA HowardEnabled
+  634 3382:D0 **        		BNE .84				; If Howard is visible, 
+  635 3384:9C D3 15     		STZ ROMPAGE			; "Before accessing memory through thi
+  636 3387:EE 21 02     .84		INC CartRegister			
+  637 338A:D0 **        		BNE .85
+  638 338C:EE 22 02     		INC CartRegister+1
+  639 338F:D0 **        		BNE .85
+  640 3391:EE 23 02     		INC CartRegister+2
+  641 3394:D0 **        		BNE .85
+  642 3396:AD 26 02     		LDA ROMPAGE_RAM
+  643 3399:8D D3 15     		STA ROMPAGE
+  644 339C:20 B9 32     		JSR EndUpload
+  645 339F:60           		RTS
+  646                   
+  647                   ; $33A0
+  648 33A0:             .85
+  649 33A0:B2 04        		LDA (sysptr3+LO) 
+  650 33A2:20 9E 32     		JSR WriteByte
+  651 33A5:80 E0        		BRA .84
+  652                   
+Epyx HandyAsm 1.12      Symbols                         12-Aug-12518:09:42 Page   13
+                                                        18:09:42  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -730,17 +762,19 @@ $FDBC BLUEREDC                          $FDBD BLUEREDD
 $FDBE BLUEREDE                          $FDBF BLUEREDF
 $0002 BORROW_IN                         $0001 BORROW_OUT
 $0003 BOUNDARY_SPRITE                   $0015 BREAK_CONTROLS
-$0002 BSHADOW_SPRITE                    $0013 BUS_MONITOR
-$0002 B_BUTTON                          $32A9 BeginUpload
-$0002 CART0_IO_INACTIVE                 $0004 CART1_IO_INACTIVE
-$0002 CART_ADDR_DATA                    $0001 CART_ADDR_STROBE
-$0002 CART_POWER_OFF                    $FC0F COLLADRH
-$FC0E COLLADRL                          $FC0B COLLBASH
-$FC0A COLLBASL                          $FC25 COLLOFFH
-$FC24 COLLOFFL                          $0003 CONTINUE_REQUEST
-$FD91 CPUSLEEP                          $FFFE CPU_IRQ
-$FFFA CPU_NMI                           $FFFC CPU_RESET
-$0221 CartridgeRegister                 $0002 DATA
+$0002 BSHADOW_SPRITE                    $0040 BUSY
+$0013 BUS_MONITOR                       $0002 B_BUTTON
+$32A9 BeginUpload                       $0002 CART0_IO_INACTIVE
+$0004 CART1_IO_INACTIVE                 $0002 CART_ADDR_DATA
+$0001 CART_ADDR_STROBE                  $0002 CART_POWER_OFF
+$FC0F COLLADRH                          $FC0E COLLADRL
+$FC0B COLLBASH                          $FC0A COLLBASL
+$FC25 COLLOFFH                          $FC24 COLLOFFL
+$0003 CONTINUE_REQUEST                  $FD91 CPUSLEEP
+$FFFE CPU_IRQ                           $FFFA CPU_NMI
+$FFFC CPU_RESET                         $0221 CartRegister
+$0002 DATA                              $0080 DATA_AVAILABLE
+$0080 DIRECTION_INPUT                   $0000 DIRECTION_OUTPUT
 $FD95 DISPADRH                          $FD94 DISPADRL
 $FD92 DISPCTL                           $1FE0 DISPLAY_BUFSIZE
 $0008 DISP_COLOR                        $0002 DISP_FLIP
@@ -756,11 +790,11 @@ $0001 EXTERNAL_POWER                    $32B9 EndUpload
 $0080 FEEDBACK_7                        $0011 FILL_MEM
 $0004 FLIP_BUTTON                       $00C0 FOUR_PER_PIXEL
 $0004 FRAMERR                           $0005 GO_REQUEST
+Epyx HandyAsm 1.12      Symbols                         12-Aug-12518:09:42 Page   14
+                                                        18:09:42  
+
 $FDA0 GREEN0                            $FDA1 GREEN1
 $FDA2 GREEN2                            $FDA3 GREEN3
-Epyx HandyAsm 1.12      Symbols                         12-Aug-12501:11:41 Page   14
-                                                        01:11:41  
-
 $FDA4 GREEN4                            $FDA5 GREEN5
 $FDA6 GREEN6                            $FDA7 GREEN7
 $FDA8 GREEN8                            $FDA9 GREEN9
@@ -812,38 +846,45 @@ $0004 NORMAL_SPRITE                     $0020 NO_COLLIDE
 $3000 NmiHandler                        $0000 ONE_PER_PIXEL
 $0008 OPTION1_BUTTON                    $0004 OPTION2_BUTTON
 $0001 ORIGIN                            $0001 OUTER_BUTTON
-$0008 OVERRUN                           $0001 PARBIT
-$0010 PAREN                             $0010 PARERR
-$0001 PAREVEN                           $0001 PAUSE_SWITCH
-$FD93 PBKUP                             $0004 PC_OFFSET
-$0002 POWERON                           $FC2F PROCADRH
-$FC2E PROCADRL                          $0006 P_OFFSET
-$1000 RCARTEN                           $FCB2 RCART_0
-$FCB3 RCART_1                           $0010 READ_ENABLE
-Epyx HandyAsm 1.12      Symbols                         12-Aug-12501:11:41 Page   15
-                                                        01:11:41  
+$0008 OVERRUN                           $0002 PAGESIZE_1024
+$0001 PAGESIZE_2048                     $0004 PAGESIZE_256
+$0000 PAGESIZE_4096                     $0003 PAGESIZE_512
+$0001 PARBIT                            $0010 PAREN
+$0010 PARERR                            $0001 PAREVEN
+$0001 PAUSE_SWITCH                      $FD93 PBKUP
+Epyx HandyAsm 1.12      Symbols                         12-Aug-12518:09:42 Page   15
+                                                        18:09:42  
 
-$0010 REGISTER                          $0203 REGISTERS
-$0007 REGISTER_BYTECOUNT                $0010 RELOAD_HV
-$0020 RELOAD_HVS                        $0030 RELOAD_HVST
-$0030 RELOAD_MASK                       $0000 RELOAD_NONE
-$0008 RESETERR                          $0040 RESET_DONE
-$0008 RESTART_BUTTON                    $0008 RESTLESS
-$0008 REUSE_PALETTE                     $0001 RIGHT0_SELECT
-$0002 RIGHT1_SELECT                     $0004 RIGHT2_SELECT
-$0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
-$001A ROM                               $15D3 ROMPAGE
+$0004 PC_OFFSET                         $1581 PORT_DATA
+$1582 PORT_DIRECTION                    $1583 PORT_POUT
+$1580 PORT_STATUS                       $0080 POUT
+$0002 POWERON                           $0007 PRIMARY_PAGING_MASK
+$FC2F PROCADRH                          $FC2E PROCADRL
+$0006 P_OFFSET                          $1000 RCARTEN
+$FCB2 RCART_0                           $FCB3 RCART_1
+$0010 READ_ENABLE                       $0010 REGISTER
+$0203 REGISTERS                         $0007 REGISTER_BYTECOUNT
+$0010 RELOAD_HV                         $0020 RELOAD_HVS
+$0030 RELOAD_HVST                       $0030 RELOAD_MASK
+$0000 RELOAD_NONE                       $0008 RESETERR
+$0040 RESET_DONE                        $0008 RESTART_BUTTON
+$0008 RESTLESS                          $0008 REUSE_PALETTE
+$0001 RIGHT0_SELECT                     $0002 RIGHT1_SELECT
+$0004 RIGHT2_SELECT                     $0008 RIGHT3_SELECT
+$000F RIGHT_ATTENMASK                   $001A ROM
+$15D3 ROMPAGE                           $0226 ROMPAGE_RAM
 $019A ROM_HEADER_SIZE                   $0007 ROM_PAGING_MASK
 $0004 ROM_SPACE                         $0003 RUN_ADDRESS
 $0002 RXBRK                             $0040 RXINTEN
-$0040 RXRDY                             $31C4 ReadAddress
-$3295 ReadByte                          $31EB ReadHoward
-$32E3 ReadMemory                        $31CB ReadRange
+$0040 RXRDY                             $3295 ReadByte
+$31EB ReadHoward                        $32E3 ReadMemory
+$31CB ReadRange                         $31C4 ReadWord
 $0201 RunAddr                           $FC2D SCBADRH
 $FC2C SCBADRL                           $FC11 SCBNEXTH
 $FC10 SCBNEXTL                          $FC23 SCVPOSH
 $FC22 SCVPOSL                           $FD90 SDONEACK
-$0006 SEE_HOWARD_REQUEST                $15E0 SEGWR
+$0038 SECONDARY_PAGING_MASK             $0006 SEE_HOWARD_REQUEST
+$0001 SEG                               $15E0 SEGWR
 $FD8C SERCTL                            $FD8D SERDAT
 $FD10 SERIALRATE                        $0010 SERIAL_INT
 $0007 SHADOW_SPRITE                     $0080 SIGNMATH
@@ -866,13 +907,16 @@ $0203 SaveA                             $020A SaveBusMonitor
 $0207 SavePCHi                          $0208 SavePCLo
 $0209 SavePS                            $0206 SaveSP
 $0204 SaveX                             $0205 SaveY
-$FFFE TEMPORG                           $0080 THREE_PER_PIXEL
+$15E1 TEMPORG                           $0080 THREE_PER_PIXEL
 $FC03 TILTACUMH                         $FC02 TILTACUML
 $FC1F TILTH                             $FC1E TILTL
 $FD00 TIMER0                            $0001 TIMER0_INT
 $FD04 TIMER1                            $0002 TIMER1_INT
 $FD08 TIMER2                            $0004 TIMER2_INT
 $FD0C TIMER3                            $0008 TIMER3_INT
+Epyx HandyAsm 1.12      Symbols                         12-Aug-12518:09:42 Page   16
+                                                        18:09:42  
+
 $FD10 TIMER4                            $FD14 TIMER5
 $0020 TIMER5_INT                        $FD18 TIMER6
 $0040 TIMER6_INT                        $FD1C TIMER7
@@ -882,28 +926,26 @@ $0003 TIM_CONTROLB                      $0002 TIM_COUNT
 $FC01 TMPADRH                           $FC00 TMPADRL
 $0014 TRACE                             $0080 TURBO_DISABLE
 $0040 TWO_PER_PIXEL                     $0002 TXBRK
-Epyx HandyAsm 1.12      Symbols                         12-Aug-12501:11:41 Page   16
-                                                        01:11:41  
-
 $0020 TXEMPTY                           $0080 TXINTEN
 $0004 TXOPEN                            $0080 TXRDY
 $0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
 $0002 UPLOAD_REQUEST                    $0002 UP_CURRENT_PAGE
 $0005 UP_HAHDATA                        $0004 UP_MEMWATCH
 $0003 UP_REGISTERS                      $0001 UP_THIS_PAGE
-$0200 Unknown                           $3150 Upload
-$31C3 UploadDone                        $337C UploadROM
-$FD08 VCOUNT                            $0008 VECTOR_SPACE
-$0004 VERTICAL_INT                      $0010 VFLIP
-$FC0D VIDADRH                           $FC0C VIDADRL
-$FC09 VIDBASH                           $FC08 VIDBASL
-$FC07 VOFFH                             $FC06 VOFFL
-$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
-$FC27 VSIZACUMH                         $FC26 VSIZACUML
-$FC2B VSIZOFFH                          $FC2A VSIZOFFL
-$0010 VSTRETCH                          $0010 VSTRETCHING
-$329E WriteByte                         $3239 WriteRange
+$0200 Unknown                           $0224 Unknown1
+$3150 Upload                            $31C3 UploadDone
+$337C UploadROM                         $FD08 VCOUNT
+$0008 VECTOR_SPACE                      $0004 VERTICAL_INT
+$0010 VFLIP                             $FC0D VIDADRH
+$FC0C VIDADRL                           $FC09 VIDBASH
+$FC08 VIDBASL                           $FC07 VOFFH
+$FC06 VOFFL                             $FC17 VPOSSTRTH
+$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
+$FC26 VSIZACUML                         $FC2B VSIZOFFH
+$FC2A VSIZOFFL                          $0010 VSTRETCH
+$0010 VSTRETCHING                       $329E WriteByte
+$3239 WriteRange                        $325A WriteRangeCore
 $0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
 $0001 X_OFFSET                          $0002 Y_OFFSET
-$0000 dest                              $0002 dest_old
-$0004 dest_old2                         
+$0000 sysptr                            $0002 sysptr2
+$0004 sysptr3                           

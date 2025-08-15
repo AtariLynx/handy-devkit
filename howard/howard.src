@@ -12,33 +12,40 @@
 LO				.EQ 0
 HI				.EQ 1
 
-RCARTEN			.EQ		$1000
+				.ORG $1000
+RCARTEN			.DS	2	; $1000		Primary and secondary memory access
 
-; 0 -> No remapping of Handy RAM 
-; 1 -> Remap 4000-7FFF in Handy RAM
-SEGWR			.EQ 	$15E0
+				.ORG $1580
+PORT_STATUS		.DS	1	; $1580
+BUSY			.EQ %01000000
+DATA_AVAILABLE	.EQ %10000000
+PORT_DATA		.DS 1	; $1581
+PORT_DIRECTION	.DS 1	; $1582
+DIRECTION_INPUT			.EQ %10000000
+DIRECTION_OUTPUT		.EQ %00000000
+PORT_POUT		.DS 1	; $1583
+POUT			.EQ %10000000
 
-LDRADD			.EQ		$15D0 ; 20 bits of cartridge address
-ROMPAGE			.EQ		$15D3
-; Primary memory paging 
-; Secondary memory paging 
-;000 -> 4096 bytes/page 
-;001 -> 2048 bytes/page 
-;010 -> 1024 bytes/page 
-;011 -> 512 bytes/page
-;100 -> 256 bytes/page
+				.ORG 	$15D0
+LDRADD			.DS 3	; $15D0-$15D2 ; 20 bits of cartridge address
+ROMPAGE			.DS 1	; $15D3 Primary and secondary paging
+PAGESIZE_4096	.EQ	%00000000
+PAGESIZE_2048	.EQ	%00000001
+PAGESIZE_1024	.EQ	%00000010
+PAGESIZE_512	.EQ	%00000011
+PAGESIZE_256	.EQ	%00000100
+ROM_PAGING_MASK			.EQ	%00000111
+PRIMARY_PAGING_MASK		.EQ	%00000111
+SECONDARY_PAGING_MASK	.EQ	%00111000
 
-ROM_PAGING_MASK	.EQ		%00000111
+				.ORG $15E0
+SEGWR			.DS 1 	; $15E0
+SEG				.EQ	%00000001	; 1 -> Remap 4000-7FFF in Handy RAM
+								; 0 -> No remapping of Handy RAM 
 
 * ===========================================================================
 
-	BEGIN_ZPAGE
-
-dest			.DS 2	; 00-01
-dest_old		.DS 2	; 02-03		Remapped memory location of Handy
-dest_old2		.DS 2	; 04-05
-
-	END_ZPAGE
+		.IN 6502:src/syszpage.src
 
 BASE_ORG		.EQ $0200
 NMI_ORG			.EQ $3000
@@ -62,16 +69,12 @@ SaveBusMonitor	.DS MONITOR_BYTECOUNT	; $020A
 ; $021E
 		.ORG BASE_ORG+$20
 
-HowardEnabled	.DS 1	; Howard board enabled (0 = No, 1 = Yes)
-CartridgeRegister	.DS	3
+HowardEnabled	.DS 1	; $0220	Howard board enabled (0 = No, 1 = Yes)
+CartRegister	.DS	3	; $0221-$0223
 ; $0221-$0223: 24-bit counter (inverted data, suggesting countdown operation)
-; $0224-$0226
-
-; $0226 ROMPAGE_RAM Shadow register to $15D3?
-
-		.ORG $15D0
-
-; $15D0-$15D2: ROM configuration (address, size parameters)
+Unknown1		.DS 2	; $0224-$0225
+ROMPAGE_RAM		.DS 1 	; $0226 		Shadow register to ROMPAGE
+; $0227
 
 * ===========================================================================
 
@@ -178,9 +181,9 @@ Download
 ; $309F
 .11		CMP #ORIGIN		; Receive load address (1)
 		BNE .12			; $30AC
-		JSR ReadAddress ; Read address from parallel port to X and A
-		STX dest
-		STA dest+1
+		JSR ReadWord ; Read address from parallel port to X and A
+		STX sysptr+LO
+		STA sysptr+HI
 		BRA Download	; $3095
 
 ; $30AC
@@ -194,7 +197,7 @@ Download
 
 .13		CMP #RUN_ADDRESS	; Receive run address (3)
 		BNE .14			; $30CB
-		JSR ReadAddress ; Read two bytes to X and A
+		JSR ReadWord ; Read two bytes to X and A
 		STX RunAddr		; Store in a special place
 		STA RunAddr+1
 		BRA Download
@@ -203,81 +206,79 @@ Download
 .14		CMP #REGISTER	; Read registers from Amiga/PC
 		BNE .15			; 
 		LDA #<SaveA		; #$03 Store $0203 as address in $00, $01
-		STA dest
+		STA sysptr+LO
 		LDA #>SaveA		; #$02
-		STA dest+1
+		STA sysptr+HI
 		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
 		JSR ReadHoward
 		BRA Download
 
 ; $30DE
 .15		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
-		BNE .27			; $311E
+		BNE .16			; $311E
 		JSR ReadByte	; Read fill value
 		PHA
-		JSR ReadAddress	; Read destination address
-		STX dest
-		STA dest+1
+		JSR ReadWord	; Read destination address
+		STX sysptr+LO
+		STA sysptr+HI
 		JSR ReadByte	; Read count #3295
 		TAY
 		LDA HowardEnabled	; Is Howard board enabled?
-		BNE $310F
+		BNE .28
 		JSR $3278		; Remap memory address
 		PLA
-; $30FA
-.20		STA (dest_old)	; Store at remapped address
-		INC dest_old
+.20		STA (sysptr2+LO)	; Store at remapped address
+		INC sysptr2+LO
 		BNE .21
-		STZ dest
-		INC dest+1
+		STZ sysptr+LO
+		INC sysptr+HI
 		PHA				; Crossing page boundary, so remap
-; $3105
 		JSR $3278
 		PLA				; Restore fill value 
-; $3109
 .21		DEY
 		BNE .20
 		JMP Download
 
 ; $310F	Read when Howard board is enabled?
+.28
 		PLA				; Restore fill value
 .23
-		STA (dest)		; Addresses when Howard is visible are unaltered
-		INC dest
+		STA (sysptr+LO)		; Addresses when Howard is visible are unaltered
+		INC sysptr+LO
 		BNE .22
-		INC dest+1
+		INC sysptr+HI
 
 .22		DEY
 		BNE .23
 		JMP Download
 
 ; $311E
-.27
+.16
 		CMP #BUS_MONITOR
-		BNE .24			; $3132
+		BNE .17			; $3132
 		LDA #<SaveBusMonitor
-		STA dest
+		STA sysptr+LO
 		LDA #>SaveBusMonitor
-		STA dest+1
+		STA sysptr+HI
 		LDY #MONITOR_BYTECOUNT
 		JSR ReadHoward	; $31EB
 		JMP Download
 
 ; $3132
-.24		CMP #LARGE_DATA
-		BNE .25			; $313F
-		JSR ReadAddress		; Read length
+.17		CMP #LARGE_DATA
+		BNE .18			; $313F
+		JSR ReadWord		; Read length
 		JSR $31FA			; Handle large data routine
 		JMP Download
 
 ; 313F
-.25		CMP #ROM
-		BNE .26			; $314C
+.18		CMP #ROM
+		BNE .19			; $314C
 		JSR $32F9
 		JSR DownloadROM
 		JMP Download
 ; $314C
-.26
+.19
 		JMP Download
 ; $314F
 Done
@@ -293,9 +294,9 @@ Upload
 ; $315A
 .31		CMP #ORIGIN
 		BNE .32			; $3167
-		JSR ReadAddress
-		STX dest
-		STA dest+1
+		JSR ReadWord
+		STX sysptr+LO
+		STA sysptr+HI
 		BRA .30			; $3150
 
 ; $3167
@@ -303,18 +304,18 @@ Upload
 		BNE .33			; $3191
 		JSR ReadByte
 		TAY
-		LDA dest
-		STA dest_old2
-		LDA dest+1
-		STA dest_old2+1
+		LDA sysptr+LO
+		STA sysptr3+LO
+		LDA sysptr+HI
+		STA sysptr3+HI
 		JSR BeginUpload
-		LDA #$02
+		LDA #DATA
 		JSR WriteByte
 		LDA $021E		; Similar to $FBB9 in monitor.src (version?)
 		JSR WriteByte
 		TYA
 		JSR WriteByte	; Length
-		JSR $3239
+		JSR WriteRange
 		JSR EndUpload
 		BRA .30
 
@@ -322,9 +323,9 @@ Upload
 .33		CMP #REGISTER
 		BNE .34			; $31AF
 		LDA #<REGISTERS
-		STA dest
+		STA sysptr+LO
 		LDA #>REGISTERS
-		STA dest+1
+		STA sysptr+HI
 		LDY #REGISTER_BYTECOUNT
 		JSR BeginUpload
 		LDA #REGISTER
@@ -351,10 +352,10 @@ Upload
 
 ; $31C3
 UploadDone
-		RTS 
+		RTS
 
 ; $31C4
-ReadAddress
+ReadWord
 		JSR ReadByte
 		TAX
 		JMP ReadByte
@@ -364,30 +365,26 @@ ReadRange
 		LDA HowardEnabled
 		BNE ReadHoward
 		JSR $3278
-; $31D3
-.38
-		JSR ReadByte
-		STA ($02)
-		INC $02
+.38		JSR ReadByte
+		STA (sysptr2+LO)
+		INC sysptr2+LO
 		BNE .37			; $31E3
-		STZ dest
-		INC dest+1
+		STZ sysptr+LO
+		INC sysptr+HI
 		JSR $3278
-
-; $31E3
 .37		DEY
-		BNE .38			; $31D3
-		LDA $02
-		STA $00
+		BNE .38
+		LDA sysptr2+LO
+		STA sysptr+LO
 		RTS
 
 ; $31EB
 ReadHoward	; Register Y is number of bytes to read
 .39		JSR ReadByte
-		STA (dest)
-		INC dest
+		STA (sysptr+LO)
+		INC sysptr+LO
 		BNE .3A			; $31F6
-		INC dest+1
+		INC sysptr+HI
 ; $31F6
 .3A		DEY
 		BNE .39			; $31EB
@@ -404,19 +401,19 @@ ReadHoward	; Register Y is number of bytes to read
 		INY
 .40		JSR $3278
 .41		JSR ReadByte
-		STA ($02)
-		INC $02
+		STA (sysptr2+LO)
+		INC sysptr2+LO
 		BNE .42			; $3217
-		STZ $00
-		INC $01
+		STZ sysptr+LO
+		INC sysptr+HI
 		JSR $3278
 ; $3217
 .42		DEX
 		BNE .41			; $3207
 		DEY
 		BNE .41			; $3207
-		LDA $02
-		STA $00
+		LDA sysptr2+LO
+		STA sysptr+LO
 		RTS
 
 ; $3222		Howard board is enabled
@@ -425,10 +422,10 @@ ReadHoward	; Register Y is number of bytes to read
 		BEQ .44			; $3227
 		INY
 .44		JSR ReadByte
-		STA (dest)
-		INC dest
+		STA (sysptr+LO)
+		INC sysptr+LO
 		BNE .45
-		INC dest+1
+		INC sysptr+HI
 .45		DEX
 		BNE .44			; $3227
 		DEY
@@ -441,92 +438,93 @@ WriteRange
 		BNE $325A
 		JSR $3278		; Memory switch
 ; $3241
-		JSR $32E3
+.50		JSR $32E3
 		JSR WriteByte
-		INC $02
-		BNE $3252
-		STZ dest
-		INC dest+1
+		INC sysptr2+LO
+		BNE .51			; $3252
+		STZ sysptr+LO
+		INC sysptr+HI
 		JSR $3278		; Memory switch
 ; $3252
-		DEY
-		BNE $3241
-		LDA dest_old
-		STA dest
+.51		DEY
+		BNE .50			; $3241
+		LDA sysptr2+LO
+		STA sysptr+LO
 		RTS
 
 ; $325A
-		LDA dest
-		STA $02
-		LDA dest+1
-		STA $03
-		JSR $32E3
+WriteRangeCore
+		LDA sysptr+LO
+		STA sysptr2+LO
+		LDA sysptr+HI
+		STA sysptr2+HI
+.53		JSR $32E3
 		JSR WriteByte
-		INC $02
-		BNE $3270
-
-		INC $03
-		INC dest+1
+		INC sysptr2+LO
+		BNE .52			; $3270
+		INC sysptr2+HI
+		INC sysptr+HI
 ; $3270
-		DEY
-		BNE $3262
-		LDA $02
-		STA dest
+.52		DEY
+		BNE .53			; $3262
+		LDA sysptr2+LO
+		STA sysptr+LO
 		RTS
 
 ; $3278
-; Memory mapping function from dest to dest_old
-		LDA dest
-		STA dest_old
-		LDA dest+1
-		BMI $3292		; Normal memory for $8000 and higher
+; Memory mapping function from sysptr to sysptr2
+		LDA sysptr+LO
+		STA sysptr2+LO
+		LDA sysptr+HI
+		BMI .55			; $3292		; Normal memory for $8000 and higher
 		CMP #$40
-		BCS $328F		; Skip when dest+1 is $40-$7F
+		BCS .54		; Skip when sysptr+HI is $40-$7F
 		PHY
-		LDY #$01
+		LDY #SEG
 		STY SEGWR		; Remap $0000-$3FFF to $4000-$7FFF in Handy RAM
 		PLY
 		ORA #$40		; Adjust address to range
-		BRA $3292
+		BRA .55
 ; $328F
+.54
 		STZ SEGWR		; No remapping of Handy RAM
 ; $3292
-		STA dest_old+1
+.55		STA sysptr2+HI
 		RTS
 
 ; $3295
 ReadByte
-		LDA $1580
-		BPL ReadByte
-		LDA $1581
+		LDA PORT_STATUS
+		BPL ReadByte	; "When receiving data, DATA AVAILABLE goes HI when data has been received."
+		LDA {PORT_DATA}
 		RTS
 
 ; $329E
 WriteByte
 		PHA
-		LDA $1580
-		BPL $329F
+		LDA PORT_STATUS
+		BPL $329F		; "When sending data, DATA AVAILABLE goes LOW until the Amiga acknowledges the transfer."
 		PLA
-		STA $1581
+		STA PORT_DATA
 		RTS
 
 ; $32A9
 BeginUpload
-		LDA $1580
-		AND #$40
+		LDA PORT_STATUS
+		AND #BUSY
 		BEQ BeginUpload
-		STZ $1582
-		LDA #$80
-		STA $1583
+		STZ PORT_DIRECTION	; Port direction to output
+		LDA #POUT
+		STA PORT_POUT		; Pout on?
 		RTS
 
 ; $32B9
 EndUpload
-		LDA $1580
+		LDA PORT_STATUS
 		BPL EndUpload
-		LDA #$80
-		STA $1582
-		STZ $1583
+		LDA #DIRECTION_INPUT
+		STA PORT_DIRECTION
+		STZ PORT_POUT		; Pout off? 
 		RTS
 
 ; $32C7
@@ -550,38 +548,33 @@ InitComm
 ReadMemory
 		LDA $0200
 		BNE $32F6
-		LDA $03
-		CMP #$FC		; Memory range below $FC00
+		LDA sysptr2+HI
+		CMP #>SUZY_BASE	; Memory range below Suzy ($FC00) is safe
 		BNE $32F6
-		LDA $02			; 
+		LDA sysptr2+LO 
 		BPL $32F8
 		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
 		BCC $32F8
 ; $32F6
-		LDA ($02)
+		LDA (sysptr2+LO)
+; $32F8
 		RTS
 
-
-; $15D0-$15D2: ROM configuration (address, size parameters)
-; $15D3: ROM bank/page control register
-; $15E0: bank switching?
-
-
 ; $32F9					; Prepares ROM access
-		JSR ReadAddress
+		JSR ReadWord
 		STX LDRADD		; $15D0
 		STA LDRADD+1	; $15D1
 		JSR ReadByte
 		STA LDRADD+2	; $15D2		20-bit address for cartridge
 		JSR ReadByte	; Length to read LSB first to MSB last
 		EOR #$FF		; EXOR'ed to count up
-		STA $0221		
+		STA CartRegister		
 		JSR ReadByte
 		EOR #$FF
-		STA $0222
+		STA CartRegister+1
 		JSR ReadByte	; MSB of address
 		EOR #$FF
-		STA $0223
+		STA CartRegister+2
 		JSR ReadByte	; ???
 		TAX
 		BMI .80
@@ -589,72 +582,70 @@ ReadMemory
 		AND #ROM_PAGING_MASK		; Page size is 3 bits (see ROMPAGE)
 		STA $0224		; ROM primary memory paging
 		LDA #<RCARTEN
-		STA $04
+		STA sysptr3+LO
 		LDA #>RCARTEN
-		STA $05
+		STA sysptr3+HI
 		BRA .81
 
 ; $3335
 .80		AND #ROM_PAGING_MASK
 		STA $0225		; ROM secondary memory paging
 		LDA #<RCARTEN+1
-		STA $04
+		STA sysptr3+LO
 		LDA #>RCARTEN
-		STA $05
+		STA sysptr3+HI
 
 ; $3342
 .81		LDA $0224
 		AND #ROM_PAGING_MASK
-		STA $0227		; 
-		LDA $0225		; Secondary paging is at bits 3-5
+		STA $0227 
+		LDA $0225			; Secondary paging is at bits 3-5
 		AND #ROM_PAGING_MASK	; Mask to make sure it is within 3 bits
 		ASL
 		ASL
-		ASL				; Shift to bits 3-5
-		ORA $0227		; Combine with primary paging
-		STA ROMPAGE		; Set resulting ROM primary and secondary paging
-		STA $0226		; ROMPAGE_RAM Shadow address
+		ASL					; Shift to bits 3-5
+		ORA $0227			; Combine with primary paging
+		STA ROMPAGE			; Set resulting ROM primary and secondary paging
+		STA ROMPAGE_RAM		; ROMPAGE_RAM Shadow address
 		RTS
 
-; $335C					; Download ROM
+; $335C
 DownloadROM
-		STZ ROMPAGE 	; "Before accessing memory through this register, the page size should be set to 4096 (full - size)"
+		STZ ROMPAGE 		; "Before accessing memory through this register, the page size should be set to 4096 (full - size)"
 .83
-		INC $0221		; Least significant byte of address
-		BNE .82			; Receive byte and write to ROM 
-		INC $0222
+		INC CartRegister	; Least significant byte of address
+		BNE .82				; Receive byte and write to ROM 
+		INC CartRegister+1
 		BNE .82
-		INC $0223		; Most significant
+		INC CartRegister+2	; Most significant
 		BNE .82		
-		LDA $0226		; ROMPAGE_RAM
-		STA ROMPAGE		; Restore original ROM paging, as reading is finished
+		LDA ROMPAGE_RAM
+		STA ROMPAGE			; Restore original ROM paging, as reading is finished
 		RTS
 		
 .82		JSR ReadByte
-		STA ($04)		; $04 holds write address of current ROM
+		STA (sysptr3+LO)	; Write address of current ROM section
 		BRA .83
 
 ; $337C
 UploadROM
 		JSR BeginUpload		; Uploading of ROM content
 		LDA HowardEnabled
-		BNE $3387			; If Howard is visible, 
+		BNE .84				; If Howard is visible, 
 		STZ ROMPAGE			; "Before accessing memory through this register, the page size should be set to 4096 (full - size)"
-; $3387
-.84
-		INC $0221			
+.84		INC CartRegister			
 		BNE .85
-		INC $0222
+		INC CartRegister+1
 		BNE .85
-		INC $0223
+		INC CartRegister+2
 		BNE .85
-		LDA $0226			; ROMPAGE_RAM
+		LDA ROMPAGE_RAM
 		STA ROMPAGE
 		JSR EndUpload
 		RTS
 
 ; $33A0
 .85
-		LDA ($04)			; 
+		LDA (sysptr3+LO) 
 		JSR WriteByte
 		BRA .84
