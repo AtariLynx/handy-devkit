@@ -262,7 +262,7 @@ UploadDone
 		RTS
 
 ReadMemory
-		LDA SuzyReadEnable	; IRQ jump table counter?
+		LDA SuzyReadEnable
 		BNE .40
 		LDA dest+1
 		CMP #>SUZY_BASE	; Check if in Suzy space
