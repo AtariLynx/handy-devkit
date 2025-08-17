@@ -52,29 +52,20 @@ NMI_ORG			.EQ $3000
 
 		.ORG BASE_ORG
 
-Unknown			.DS 1	; 
+DirectMemory	.DS 1	; Non-zero bypasses memory protection of $FC00+
 RunAddr			.DS 2
 
-REGISTERS:
-SaveA			.DS 1	; $0203
-SaveX			.DS 1	; $0204
-SaveY			.DS 1	; $0205
-SaveSP			.DS 1	; $0206
-SavePCHi		.DS 1	; $0207
-SavePCLo		.DS 1	; $0208
-SavePS			.DS 1	; $0209
-SaveBusMonitor	.DS MONITOR_BYTECOUNT	; $020A
-;$020A-$0219	Monitor values
-
-; $021E
+Registers		.DS REGISTER_BYTECOUNT	; $0203-$0209
+BusMonitor		.DS MONITOR_BYTECOUNT	; $020A-$0219	Monitor values
+		.ORG BASE_ORG+$1E
+VERSION			.DS 1		; $021E
 		.ORG BASE_ORG+$20
-
-HowardEnabled	.DS 1	; $0220	Howard board enabled (0 = No, 1 = Yes)
-CartRegister	.DS	3	; $0221-$0223
-; $0221-$0223: 24-bit counter (inverted data, suggesting countdown operation)
-Unknown1		.DS 2	; $0224-$0225
-ROMPAGE_RAM		.DS 1 	; $0226 		Shadow register to ROMPAGE
-; $0227
+HowardEnabled	.DS 1		; $0220:		Howard board enabled (0 = No, 1 = Yes)
+CartRegister	.DS	3		; $0221-$0223:	24-bit counter (inverted data)
+PrimaryRomSize	.DS 1		; $0224
+SecondaryRomSize	.DS 1	; $0225
+ROMPAGE_RAM		.DS 1 		; $0226: 		Shadow register to ROMPAGE
+RomSizeTemp		.DS 1		; $0227
 
 * ===========================================================================
 
@@ -83,17 +74,17 @@ ROMPAGE_RAM		.DS 1 	; $0226 		Shadow register to ROMPAGE
 
 NmiHandler	; $3000
 		CLD
-		STA SaveA 			; Store accumulator, X and Y register for transfer
-		STX SaveX
-		STY SaveY
-		PLA 				; Get PC, ReturnHi, ReturnLo from stack
+		STA Registers+A_OFFSET 			; Store accumulator, X and Y register for transfer
+		STX Registers+X_OFFSET
+		STY Registers+Y_OFFSET
+		PLA 			; Get status, low and high return address from stack
 		PLX
 		PLY
-		STA SavePS			; Store for inspection
-		STX SavePCHi
-		STY SavePCLo
+		STA Registers+P_OFFSET			; Store for inspection
+		STX Registers+PC_OFFSET+LO
+		STY Registers+PC_OFFSET+HI
 		TSX					; Store stack pointer 
-		STX SaveSP
+		STX Registers+S_OFFSET
 
 ; Silence all audio channels	$301A
 		STZ AUDIO0+AUD_VOLCNTRL
@@ -129,17 +120,17 @@ Main	; $3029
 		BNE .4
 
 ; Restore all previous values and return from NMI handler
-.9		LDX SaveSP		; Restore stack pointer
+.9		LDX Registers+S_OFFSET		; Restore stack pointer
 		TXS
-		LDA SavePCLo	.DS 1	; $0208
+		LDA Registers+S_OFFSET+HI	; $0208
 		PHA
-		LDA SavePCHi	.DS 1	; $0207
+		LDA Registers+S_OFFSET+LO	; $0207
 		PHA
-		LDA SavePS		.DS 1	; $0209
+		LDA Registers+P_OFFSET		; $0209
 		PHA
-		LDA SaveA		; Load stored values for A, X, Y 
-		LDX SaveX
-		LDY SaveY
+		LDA Registers+A_OFFSET		; Load stored values for A, X, Y 
+		LDX Registers+X_OFFSET
+		LDY Registers+Y_OFFSET
 		RTI
 
 ; $3067
@@ -187,29 +178,29 @@ Download
 		BRA Download	; $3095
 
 ; $30AC
-.12		CMP #DATA		; Load data of max 1-255 bytes (2)
+.12		CMP #DATA			; Load data of max 1-255 bytes (2)
 		BNE .13
-		JSR ReadByte	; Read byte from parallel port 
-		JSR ReadByte	; and another one, discarding first (potentially unused checksum)
+		JSR ReadByte		; Read byte from parallel port 
+		JSR ReadByte		; and another one, discarding first (potentially unused checksum)
 		TAY
-		JSR ReadRange	; Read Y number of bytes and store in ($00) ; $31CB
+		JSR ReadRange		; Read Y number of bytes and store in ($00) ; $31CB
 		BRA Download
 
 .13		CMP #RUN_ADDRESS	; Receive run address (3)
-		BNE .14			; $30CB
-		JSR ReadWord ; Read two bytes to X and A
-		STX RunAddr		; Store in a special place
+		BNE .14				; $30CB
+		JSR ReadWord 		; Read two bytes to X and A
+		STX RunAddr			; Store in a special place
 		STA RunAddr+1
 		BRA Download
 
 ; 30CB
-.14		CMP #REGISTER	; Read registers from Amiga/PC
-		BNE .15			; 
-		LDA #<SaveA		; #$03 Store $0203 as address in $00, $01
+.14		CMP #REGISTER		; Read registers from Amiga/PC
+		BNE .15
+		LDA #<Registers		; #$03 Store $0203 as address in $00, $01
 		STA sysptr+LO
-		LDA #>SaveA		; #$02
+		LDA #>Registers		; #$02
 		STA sysptr+HI
-		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
+		LDY #REGISTER_BYTECOUNT	; Send 7 bytes from $0203 and up
 		JSR ReadHoward
 		BRA Download
 
@@ -256,9 +247,9 @@ Download
 .16
 		CMP #BUS_MONITOR
 		BNE .17			; $3132
-		LDA #<SaveBusMonitor
+		LDA #<BusMonitor
 		STA sysptr+LO
-		LDA #>SaveBusMonitor
+		LDA #>BusMonitor
 		STA sysptr+HI
 		LDY #MONITOR_BYTECOUNT
 		JSR ReadHoward	; $31EB
@@ -311,7 +302,7 @@ Upload
 		JSR BeginUpload
 		LDA #DATA
 		JSR WriteByte
-		LDA $021E		; Similar to $FBB9 in monitor.src (version?)
+		LDA VERSION		; Similar to $FBB9 in monitor.src
 		JSR WriteByte
 		TYA
 		JSR WriteByte	; Length
@@ -322,9 +313,9 @@ Upload
 ; $3191
 .33		CMP #REGISTER
 		BNE .34			; $31AF
-		LDA #<REGISTERS
+		LDA #<Registers
 		STA sysptr+LO
-		LDA #>REGISTERS
+		LDA #>Registers
 		STA sysptr+HI
 		LDY #REGISTER_BYTECOUNT
 		JSR BeginUpload
@@ -502,8 +493,8 @@ ReadByte
 ; $329E
 WriteByte
 		PHA
-		LDA PORT_STATUS
-		BPL $329F		; "When sending data, DATA AVAILABLE goes LOW until the Amiga acknowledges the transfer."
+.60		LDA PORT_STATUS
+		BPL .60		; "When sending data, DATA AVAILABLE goes LOW until the Amiga acknowledges the transfer."
 		PLA
 		STA PORT_DATA
 		RTS
@@ -530,35 +521,32 @@ EndUpload
 ; $32C7
 InitComm
 		PHA
-		LDA $1580
-		AND #$40
-		BNE $32C8
-		LDA #$80
-		STA $1582
-		STA $1583
-; $32D7
-		LDA $1580
-		AND #$40
-		BEQ $32D7
-		STZ $1583
+.61		LDA PORT_STATUS
+		AND #BUSY
+		BNE .61
+		LDA #DIRECTION_INPUT
+		STA PORT_DIRECTION
+		STA PORT_POUT		; DIRECTION_OUTPUT == POUT
+.62		LDA PORT_STATUS
+		AND #BUSY
+		BEQ .62
+		STZ PORT_POUT
 		PLA
 		RTS
 
 ; $32E3
 ReadMemory
 		LDA $0200
-		BNE $32F6
+		BNE .63
 		LDA sysptr2+HI
 		CMP #>SUZY_BASE	; Memory range below Suzy ($FC00) is safe
-		BNE $32F6
+		BNE .63
 		LDA sysptr2+LO 
-		BPL $32F8
+		BPL .64
 		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
-		BCC $32F8
-; $32F6
-		LDA (sysptr2+LO)
-; $32F8
-		RTS
+		BCC .64
+.63 	LDA (sysptr2+LO)
+.64 	RTS
 
 ; $32F9					; Prepares ROM access
 		JSR ReadWord
@@ -580,7 +568,7 @@ ReadMemory
 		BMI .80
 		
 		AND #ROM_PAGING_MASK		; Page size is 3 bits (see ROMPAGE)
-		STA $0224		; ROM primary memory paging
+		STA PrimaryRomSize		; ROM primary memory paging
 		LDA #<RCARTEN
 		STA sysptr3+LO
 		LDA #>RCARTEN
@@ -589,22 +577,22 @@ ReadMemory
 
 ; $3335
 .80		AND #ROM_PAGING_MASK
-		STA $0225		; ROM secondary memory paging
+		STA SecondaryRomSize		; ROM secondary memory paging
 		LDA #<RCARTEN+1
 		STA sysptr3+LO
 		LDA #>RCARTEN
 		STA sysptr3+HI
 
 ; $3342
-.81		LDA $0224
+.81		LDA PrimaryRomSize
 		AND #ROM_PAGING_MASK
-		STA $0227 
-		LDA $0225			; Secondary paging is at bits 3-5
+		STA RomSizeTemp 
+		LDA SecondaryRomSize			; Secondary paging is at bits 3-5
 		AND #ROM_PAGING_MASK	; Mask to make sure it is within 3 bits
 		ASL
 		ASL
 		ASL					; Shift to bits 3-5
-		ORA $0227			; Combine with primary paging
+		ORA RomSizeTemp			; Combine with primary paging
 		STA ROMPAGE			; Set resulting ROM primary and secondary paging
 		STA ROMPAGE_RAM		; ROMPAGE_RAM Shadow address
 		RTS
