@@ -18,8 +18,8 @@ HI				.EQ 1
 
 		.ORG MONITOR_ZP_RESERVED
 
-sysptr		.DS 2	; F8-F9
-sysptr2	.DS 2	; FA-FB
+sysptr			.DS 2	; F8-F9
+sysptr2			.DS 2	; FA-FB
 
 * ===========================================================================
 
@@ -50,7 +50,7 @@ NmiHandler
 		STA Registers+A_OFFSET 			; Store accumulator, X and Y register for transfer
 		STX Registers+X_OFFSET
 		STY Registers+Y_OFFSET
-		PLA 			; Get status, low and high return address from stack
+		PLA 				; Get status, low and high return address from stack
 		PLX
 		PLY
 		STA Registers+P_OFFSET			; Store for inspection
@@ -136,7 +136,7 @@ Download
 
 .7		CMP #ORIGIN		; Receive load address (1)
 		BNE .8
-		JSR ReadWord ; Read address from parallel port to X and A
+		JSR ReadWord 	; Read address from parallel port to X and A
 		STX sysptr
 		STA sysptr+1
 		JMP NextCommand
@@ -159,7 +159,7 @@ Download
 
 .10		CMP #REGISTER	; Read registers from Amiga/PC
 		BNE .11
-		LDA #<Registers		; Store $FBB0 as address in $F8, $F9
+		LDA #<Registers	; Store $FBB0 as address in $F8, $F9
 		STA sysptr
 		LDA #>Registers
 		STA sysptr+1
@@ -177,7 +177,7 @@ Download
 		JSR ReadByte	; Read count
 		TAY
 		PLA
-.20		STA (sysptr)		; Store at address in ($F8)
+.20		STA (sysptr)	; Store at address in ($F8)
 		INC sysptr
 		BNE .21
 		INC sysptr+1
@@ -188,13 +188,13 @@ Download
 ; Assumes ORIGIN is previous command to set destination address
 .12		CMP #LARGE_DATA	; Load longer range of data (12)
 		BNE NextCommand
-		JSR ReadWord ; Read length
+		JSR ReadWord 	; Read length
 		TAY
 		TXA
 		BEQ .30
 		INY
 .30		JSR ReadByte	; Read data from parallel port
-		STA (sysptr)		; Store in location at $F8
+		STA (sysptr)	; Store in location at $F8
 		INC sysptr
 		BNE .31
 		INC sysptr+1
@@ -272,7 +272,7 @@ ReadMemory
 		LDA sysptr
 		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
 		BCC .41
-.40		LDA (sysptr)		; Load value at address
+.40		LDA (sysptr)	; Load value at address
 .41		RTS
 
 ReadWord
@@ -283,7 +283,7 @@ ReadWord
 ReadRange
 ; Read Y bytes and store in memory location specified by sysptr
 		JSR ReadByte	; Read byte from parallel port
-		STA (sysptr)		; Store in address at $F8-$F9
+		STA (sysptr)	; Store in address at $F8-$F9
 		INC sysptr		; Increase address
 		BNE .42
 		INC sysptr+1
@@ -419,16 +419,16 @@ SetPage
 		PLX
 		RTS
 
-.fe			.DS 1
-.ff			.DS 1
+.fe				.DS 1
+.ff				.DS 1
 
-RunAddr		.DS 2		; FBAE-FBAF
-Registers	.DS REGISTER_BYTECOUNT		; FBB0-FBB6
-Unused		.DS 1		; FBB7
-MAPCTL_RAM	.DS 1		; FBB8
-VERSION		.DS 1		; Version number?
-IODAT_RAM	.DS 1		; FBBA - Unused
-IODIR_RAM	.DS 1		; FBBB
+RunAddr			.DS 2	; FBAE-FBAF
+Registers		.DS REGISTER_BYTECOUNT		; FBB0-FBB6
+Unused			.DS 1	; FBB7
+MAPCTL_RAM		.DS 1	; FBB8
+VERSION			.DS 1	; Version number?
+IODAT_RAM		.DS 1	; FBBA - Unused
+IODIR_RAM		.DS 1	; FBBB
 
 * This code is called whenever a non-NMI interrupt occurs (either a hardware
 * interrupt or execution of a software BRK).

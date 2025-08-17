@@ -4,6 +4,7 @@
 
 		.IN 6502:include/harddefs.i
 		.IN 6502:macros/sys.mac
+  		.IN	6502:macros/zpage.mac
 
 	.LIST ON
 
@@ -13,15 +14,18 @@ HI			.EQ 1
 
 * ===========================================================================
 
-		.ORG $0000
-sysptr			.DS 2
-Unused	 		.DS 4
+		.IN 6502:src/syszpage.src
+
+  		BEGIN_ZPAGE
+
 CartPage		.DS 1	; $06
 CartOffsetLo	.DS 1	; $07
 CartOffsetHi	.DS 1	; $08
 Unknown2		.DS 1	; $09
 PageCount		.DS 1	; $0A
 CartSize		.DS 3	; $0B-$0C-$0D
+
+  		END_ZPAGE
 
 * ===========================================================================
 
@@ -180,7 +184,7 @@ ReadPage8	; Read status
 		BRA ReadCart1
 ReadPage9	; Read latch
 		LDA #$09
-ReadCart1	; SetPageread
+ReadCart1
 		JSR SetCartBlock1
 		LDA RCART_1
 		RTS

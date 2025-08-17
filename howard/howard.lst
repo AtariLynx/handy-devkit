@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    1
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    1
+                                                        03:07:03  
 
     1                   * ====================================================
     2                   
@@ -59,8 +59,8 @@
    14                   * 22 Mar 89	-RJ		Removed the audio variables from this
    15                   * 20 Mar 89	RG Goudy	Added several new zpage pointers
    16                   * 26 Jan 89	-RJ		Got rid of Interruptus
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    2
-                        6502:src/syszpage.src           01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    2
+                        6502:src/syszpage.src           03:07:03  
 
    17                   * 26-Dec-88	=RJ Mical=	Created this file from sysdata.
    18                   *
@@ -121,8 +121,8 @@
    72 0228:             		.ORG NMI_ORG
    73                   		.RUN *
    74                   
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    3
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    3
+                                                        03:07:03  
 
    75 3000:             NmiHandler	; $3000
    76 3000:D8           		CLD
@@ -183,8 +183,8 @@
   131 305D:AD 03 02     		LDA Registers+A_OFFSET		; Load stored values for A, 
   132 3060:AE 04 02     		LDX Registers+X_OFFSET
   133 3063:AC 05 02     		LDY Registers+Y_OFFSET
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    4
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    4
+                                                        03:07:03  
 
   134 3066:40           		RTI
   135                   
@@ -233,32 +233,32 @@
   178 30AA:80 E9        		BRA Download	; $3095
   179                   
   180                   ; $30AC
-  181 30AC:C9 02        .12		CMP #DATA		; Load data of max 1-255 bytes (2)
+  181 30AC:C9 02        .12		CMP #DATA			; Load data of max 1-255 bytes (2)
   182 30AE:D0 **        		BNE .13
-  183 30B0:20 ** **     		JSR ReadByte	; Read byte from parallel port 
-  184 30B3:20 ** **     		JSR ReadByte	; and another one, discarding first (po
+  183 30B0:20 ** **     		JSR ReadByte		; Read byte from parallel port 
+  184 30B3:20 ** **     		JSR ReadByte		; and another one, discarding first (p
   185 30B6:A8           		TAY
-  186 30B7:20 ** **     		JSR ReadRange	; Read Y number of bytes and store in 
+  186 30B7:20 ** **     		JSR ReadRange		; Read Y number of bytes and store in
   187 30BA:80 D9        		BRA Download
   188                   
   189 30BC:C9 03        .13		CMP #RUN_ADDRESS	; Receive run address (3)
-  190 30BE:D0 **        		BNE .14			; $30CB
-  191 30C0:20 ** **     		JSR ReadWord ; Read two bytes to X and A
-  192 30C3:8E 01 02     		STX RunAddr		; Store in a special place
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    5
-                                                        01:49:33  
+  190 30BE:D0 **        		BNE .14				; $30CB
+  191 30C0:20 ** **     		JSR ReadWord 		; Read two bytes to X and A
+  192 30C3:8E 01 02     		STX RunAddr			; Store in a special place
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    5
+                                                        03:07:03  
 
   193 30C6:8D 02 02     		STA RunAddr+1
   194 30C9:80 CA        		BRA Download
   195                   
   196                   ; 30CB
-  197 30CB:C9 10        .14		CMP #REGISTER	; Read registers from Amiga/PC
-  198 30CD:D0 **        		BNE .15			; 
-  199 30CF:A9 **        		LDA #<SaveA		; #$03 Store $0203 as address in $00, $
+  197 30CB:C9 10        .14		CMP #REGISTER		; Read registers from Amiga/PC
+  198 30CD:D0 **        		BNE .15
+  199 30CF:A9 03        		LDA #<Registers		; #$03 Store $0203 as address in $0
   200 30D1:85 00        		STA sysptr+LO
-  201 30D3:A9 **        		LDA #>SaveA		; #$02
+  201 30D3:A9 02        		LDA #>Registers		; #$02
   202 30D5:85 01        		STA sysptr+HI
-  203 30D7:A0 07        		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $0203
+  203 30D7:A0 07        		LDY #REGISTER_BYTECOUNT	; Send 7 bytes from $0203 an
   204 30D9:20 ** **     		JSR ReadHoward
   205 30DC:80 B7        		BRA Download
   206                   
@@ -307,8 +307,8 @@
   249 3120:D0 **        		BNE .17			; $3132
   250 3122:A9 0A        		LDA #<BusMonitor
   251 3124:85 00        		STA sysptr+LO
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    6
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    6
+                                                        03:07:03  
 
   252 3126:A9 02        		LDA #>BusMonitor
   253 3128:85 01        		STA sysptr+HI
@@ -369,8 +369,8 @@
   308 3186:20 ** **     		JSR WriteByte	; Length
   309 3189:20 ** **     		JSR WriteRange
   310 318C:20 ** **     		JSR EndUpload
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    7
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    7
+                                                        03:07:03  
 
   311 318F:80 BF        		BRA .30
   312                   
@@ -431,8 +431,8 @@
   367 31E4:D0 ED        		BNE .38
   368 31E6:A5 02        		LDA sysptr2+LO
   369 31E8:85 00        		STA sysptr+LO
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    8
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    8
+                                                        03:07:03  
 
   370 31EA:60           		RTS
   371                   
@@ -493,8 +493,8 @@
   426                   ; $3239
   427 3239:             WriteRange
   428 3239:AD 20 02     		LDA HowardEnabled
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page    9
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page    9
+                                                        03:07:03  
 
   429 323C:D0 1C        		BNE $325A
   430 323E:20 78 32     		JSR $3278		; Memory switch
@@ -555,8 +555,8 @@
   485                   
   486                   ; $3295
   487 3295:             ReadByte
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page   10
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page   10
+                                                        03:07:03  
 
   488 3295:AD 80 15     		LDA PORT_STATUS
   489 3298:10 FB        		BPL ReadByte	; "When receiving data, DATA AVAILABLE 
@@ -617,8 +617,8 @@
   544 32EE:A5 02        		LDA sysptr2+LO 
   545 32F0:10 **        		BPL .64
   546 32F2:C9 84        		CMP #$84		; Do nothing for $FC84 and below (Unalloca
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page   11
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page   11
+                                                        03:07:03  
 
   547 32F4:90 **        		BCC .64
   548 32F6:B2 02        .63 	LDA (sysptr2+LO)
@@ -679,8 +679,8 @@
   603 335F:             .83
   604 335F:EE 21 02     		INC CartRegister	; Least significant byte of address
   605 3362:D0 **        		BNE .82				; Receive byte and write to ROM 
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12501:49:33 Page   12
-                                                        01:49:33  
+Epyx HandyAsm 1.12      howard.src                      13-Aug-12503:07:03 Page   12
+                                                        03:07:03  
 
   606 3364:EE 22 02     		INC CartRegister+1
   607 3367:D0 **        		BNE .82
@@ -717,10 +717,8 @@
   638 33A2:20 9E 32     		JSR WriteByte
   639 33A5:80 E0        		BRA .84
   640                   
-ERROR: Undefined symbol - SaveA
-ERROR: Undefined symbol - SaveA
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12501:49:33 Page   13
-                                                        01:49:33  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12503:07:03 Page   13
+                                                        03:07:03  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -780,8 +778,8 @@ MACRO END_ZPAGE                         $0004 EVER_ON
 $0001 EXTERNAL_POWER                    $32B9 EndUpload
 $0080 FEEDBACK_7                        $0011 FILL_MEM
 $0004 FLIP_BUTTON                       $00C0 FOUR_PER_PIXEL
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12501:49:33 Page   14
-                                                        01:49:33  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12503:07:03 Page   14
+                                                        03:07:03  
 
 $0004 FRAMERR                           $0005 GO_REQUEST
 $FDA0 GREEN0                            $FDA1 GREEN1
@@ -842,8 +840,8 @@ $0001 PAGESIZE_2048                     $0004 PAGESIZE_256
 $0000 PAGESIZE_4096                     $0003 PAGESIZE_512
 $0001 PARBIT                            $0010 PAREN
 $0010 PARERR                            $0001 PAREVEN
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12501:49:33 Page   15
-                                                        01:49:33  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12503:07:03 Page   15
+                                                        03:07:03  
 
 $0001 PAUSE_SWITCH                      $FD93 PBKUP
 $0004 PC_OFFSET                         $1581 PORT_DATA
@@ -895,45 +893,45 @@ $FC90 SUZYBUSEN                         $FC88 SUZYHREV
 $FC89 SUZYSREV                          $FC00 SUZY_BASE
 $0001 SUZY_SPACE                        $FCB1 SWITCHES
 $FD87 SYSCTL1                           $0003 S_OFFSET
-????? SaveA                             $0225 SecondaryRomSize
-$15E1 TEMPORG                           $0080 THREE_PER_PIXEL
-$FC03 TILTACUMH                         $FC02 TILTACUML
-$FC1F TILTH                             $FC1E TILTL
-$FD00 TIMER0                            $0001 TIMER0_INT
-$FD04 TIMER1                            $0002 TIMER1_INT
-$FD08 TIMER2                            $0004 TIMER2_INT
-$FD0C TIMER3                            $0008 TIMER3_INT
-$FD10 TIMER4                            $FD14 TIMER5
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12501:49:33 Page   16
-                                                        01:49:33  
+$0225 SecondaryRomSize                  $15E1 TEMPORG
+$0080 THREE_PER_PIXEL                   $FC03 TILTACUMH
+$FC02 TILTACUML                         $FC1F TILTH
+$FC1E TILTL                             $FD00 TIMER0
+$0001 TIMER0_INT                        $FD04 TIMER1
+$0002 TIMER1_INT                        $FD08 TIMER2
+$0004 TIMER2_INT                        $FD0C TIMER3
+$0008 TIMER3_INT                        $FD10 TIMER4
+$FD14 TIMER5                            $0020 TIMER5_INT
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12503:07:03 Page   16
+                                                        03:07:03  
 
-$0020 TIMER5_INT                        $FD18 TIMER6
-$0040 TIMER6_INT                        $FD1C TIMER7
-$0080 TIMER7_INT                        $0008 TIMER_DONE
-$0000 TIM_BACKUP                        $0001 TIM_CONTROLA
-$0003 TIM_CONTROLB                      $0002 TIM_COUNT
-$FC01 TMPADRH                           $FC00 TMPADRL
-$0014 TRACE                             $0080 TURBO_DISABLE
-$0040 TWO_PER_PIXEL                     $0002 TXBRK
-$0020 TXEMPTY                           $0080 TXINTEN
-$0004 TXOPEN                            $0080 TXRDY
-$0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
-$0002 UPLOAD_REQUEST                    $0002 UP_CURRENT_PAGE
-$0005 UP_HAHDATA                        $0004 UP_MEMWATCH
-$0003 UP_REGISTERS                      $0001 UP_THIS_PAGE
-$3150 Upload                            $31C3 UploadDone
-$337C UploadROM                         $FD08 VCOUNT
-$0008 VECTOR_SPACE                      $021E VERSION
-$0004 VERTICAL_INT                      $0010 VFLIP
-$FC0D VIDADRH                           $FC0C VIDADRL
-$FC09 VIDBASH                           $FC08 VIDBASL
-$FC07 VOFFH                             $FC06 VOFFL
-$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
-$FC27 VSIZACUMH                         $FC26 VSIZACUML
-$FC2B VSIZOFFH                          $FC2A VSIZOFFL
-$0010 VSTRETCH                          $0010 VSTRETCHING
-$329E WriteByte                         $3239 WriteRange
-$325A WriteRangeCore                    $0006 XOR_SHADOW_SPRITE
-$0006 XOR_SPRITE                        $0001 X_OFFSET
-$0002 Y_OFFSET                          $0000 sysptr
-$0002 sysptr2                           $0004 sysptr3
+$FD18 TIMER6                            $0040 TIMER6_INT
+$FD1C TIMER7                            $0080 TIMER7_INT
+$0008 TIMER_DONE                        $0000 TIM_BACKUP
+$0001 TIM_CONTROLA                      $0003 TIM_CONTROLB
+$0002 TIM_COUNT                         $FC01 TMPADRH
+$FC00 TMPADRL                           $0014 TRACE
+$0080 TURBO_DISABLE                     $0040 TWO_PER_PIXEL
+$0002 TXBRK                             $0020 TXEMPTY
+$0080 TXINTEN                           $0004 TXOPEN
+$0080 TXRDY                             $0004 UNSAFEACCESS
+$0004 UNSAFEACCESSRST                   $0002 UPLOAD_REQUEST
+$0002 UP_CURRENT_PAGE                   $0005 UP_HAHDATA
+$0004 UP_MEMWATCH                       $0003 UP_REGISTERS
+$0001 UP_THIS_PAGE                      $3150 Upload
+$31C3 UploadDone                        $337C UploadROM
+$FD08 VCOUNT                            $0008 VECTOR_SPACE
+$021E VERSION                           $0004 VERTICAL_INT
+$0010 VFLIP                             $FC0D VIDADRH
+$FC0C VIDADRL                           $FC09 VIDBASH
+$FC08 VIDBASL                           $FC07 VOFFH
+$FC06 VOFFL                             $FC17 VPOSSTRTH
+$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
+$FC26 VSIZACUML                         $FC2B VSIZOFFH
+$FC2A VSIZOFFL                          $0010 VSTRETCH
+$0010 VSTRETCHING                       $329E WriteByte
+$3239 WriteRange                        $325A WriteRangeCore
+$0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
+$0001 X_OFFSET                          $0002 Y_OFFSET
+$0000 sysptr                            $0002 sysptr2
+$0004 sysptr3                           
