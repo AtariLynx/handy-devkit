@@ -65,10 +65,10 @@ NmiHandler
 		STZ AUDIO2+AUD_VOLCNTRL
 		STZ AUDIO3+AUD_VOLCNTRL
 
-		JSR InitComm
+		JSR NotifyHandyReset
 
 Main
-		JSR ReadByte		; Read byte from parallel port
+		JSR ReceiveByte		; Read byte from parallel port
 
 		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "Download"
 		BNE .2
@@ -117,67 +117,67 @@ Main
 		BNE .6
 		JSR BeginUpload
 		LDA #$00
-		JSR WriteByte	; Zero (A) to page 1
+		JSR SendByte		; Zero (A) to page 1
 		JSR EndUpload
-		JMP Main		; Next control command
+		JMP Main			; Next control command
 
-.6		JMP Main		; Next control command
+.6		JMP Main			; Next control command
 
 IrqStub
 		RTS
 
 ; Control loop for downloading bin from Pinky to Mandy
 Download
-		JSR ReadByte	; Read byte from parallel port
+		JSR ReceiveByte	; Read byte from parallel port
 
 		CMP #END_OF_FILE ; End of .bin file
 		BNE .7
 		JMP Done
 
-.7		CMP #ORIGIN		; Receive load address (1)
+.7		CMP #ORIGIN			; Receive load address (1)
 		BNE .8
-		JSR ReadWord 	; Read address from parallel port to X and A
+		JSR ReceiveWord 	; Read address from parallel port to X and A
 		STX sysptr
 		STA sysptr+1
 		JMP NextCommand
 
 .8
-		CMP #DATA		; Load data of max 1-255 bytes (2)
+		CMP #DATA			; Load data of max 1-255 bytes (2)
 		BNE .9
-		JSR ReadByte	; Read byte from parallel port 
-		JSR ReadByte	; and another one, discarding first (potentially unused checksum)
+		JSR ReceiveByte		; Read byte from parallel port 
+		JSR ReceiveByte		; and another one, discarding first (potentially unused checksum)
 		TAY
-		JSR ReadRange	; Read Y number of bytes and store in ($F8)
+		JSR ReceiveRange	; Read Y number of bytes and store in ($F8)
 		BRA NextCommand
 
 .9		CMP #RUN_ADDRESS	; Receive run address (3)
 		BNE .10
-		JSR ReadWord ; Read two bytes to X and A
-		STX RunAddr		; Store in a special place
+		JSR ReceiveWord 	; Read two bytes to X and A
+		STX RunAddr			; Store in a special place
 		STA RunAddr+1
 		BRA NextCommand
 
-.10		CMP #REGISTER	; Read registers from Amiga/PC
+.10		CMP #REGISTER		; Read registers from Amiga/PC
 		BNE .11
-		LDA #<Registers	; Store $FBB0 as address in $F8, $F9
+		LDA #<Registers		; Store $FBB0 as address in $F8, $F9
 		STA sysptr
 		LDA #>Registers
 		STA sysptr+1
 		LDY #REGISTER_BYTECOUNT	; Read 7 bytes to $FBB0
-		JSR ReadRange
+		JSR ReceiveRange
 		BRA NextCommand
 
-.11		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
+.11		CMP #FILL_MEM		; Fill Range with value: 11 Value Lo Hi Count
 		BNE .12
-		JSR ReadByte	; Read fill value 
+		JSR ReceiveByte		; Read fill value 
 		PHA
-		JSR ReadWord	; Read destination address 
+		JSR ReceiveWord		; Read destination address 
 		STX sysptr
 		STA sysptr+1
-		JSR ReadByte	; Read count
+		JSR ReceiveByte		; Read count
 		TAY
 		PLA
-.20		STA (sysptr)	; Store at address in ($F8)
+.20		STA (sysptr)		; Store at address in ($F8)
 		INC sysptr
 		BNE .21
 		INC sysptr+1
@@ -188,13 +188,13 @@ Download
 ; Assumes ORIGIN is previous command to set destination address
 .12		CMP #LARGE_DATA	; Load longer range of data (12)
 		BNE NextCommand
-		JSR ReadWord 	; Read length
+		JSR ReceiveWord 	; Read length
 		TAY
 		TXA
 		BEQ .30
 		INY
-.30		JSR ReadByte	; Read data from parallel port
-		STA (sysptr)	; Store in location at $F8
+.30		JSR ReceiveByte		; Read data from parallel port
+		STA (sysptr)		; Store in location at $F8
 		INC sysptr
 		BNE .31
 		INC sysptr+1
@@ -205,61 +205,61 @@ Download
 		BRA NextCommand
 
 NextCommand
-		JMP Download	; And read next command
+		JMP Download		; And read next command
 
 Done
 		RTS
 
 Upload
-		JSR ReadByte	; Read byte from parallel port
+		JSR ReceiveByte		; Read byte from parallel port
 
 		CMP #END_OF_FILE
 		BNE .13
-		JMP UploadDone	; Done
+		JMP UploadDone		; Done
 
-.13		CMP #ORIGIN		; Start address (1)
+.13		CMP #ORIGIN			; Start address (1)
 		BNE .14
-		JSR ReadWord	; Read two byte and store in $F8, $F9
+		JSR ReceiveWord		; Read two byte and store in $F8, $F9
 		STX sysptr
 		STA sysptr+1
-		BRA UploadNext	; Next command
+		BRA UploadNext		; Next command
 
-.14		CMP #DATA		; Send bytes to host (2)
+.14		CMP #DATA			; Send bytes to host (2)
 		BNE .15
-		JSR ReadByte	; Read number of bytes to send
+		JSR ReceiveByte		; Read number of bytes to send
 		TAY
-		LDA sysptr		; Create backup of destination to $FA,$FB
+		LDA sysptr			; Create backup of destination to $FA,$FB
 		STA sysptr2
 		LDA sysptr+1
-		STA sysptr2+1	; Are these ever used?
+		STA sysptr2+1		; Are these ever used?
 
 		JSR BeginUpload
-		LDA #DATA		; Echo command to page 1
-		JSR WriteByte
-		LDA VERSION		; Load value from VERSION (assuming this is a version number)
-		JSR WriteByte	; Write value to page 1
-		TYA				; Get previously read value 
-		JSR WriteByte	; Write length to page 1
-		JSR WriteRange	; Write Y values from ($F8) to page 1
+		LDA #DATA			; Echo command to page 1
+		JSR SendByte
+		LDA VERSION			; Load value from VERSION (assuming this is a version number)
+		JSR SendByte		; Write value to page 1
+		TYA					; Get previously read value 
+		JSR SendByte		; Write length to page 1
+		JSR SendRange		; Write Y values from ($F8) to page 1
 		JSR EndUpload
 		BRA UploadNext
 
-.15		CMP #REGISTER	; $10 means "Send registers to Amiga/PC"
-		BNE UploadNext	; Next command for unrecognized commands
-		LDA #<Registers	; Store $FBB0 in sysptr as start address of register range
+.15		CMP #REGISTER		; $10 means "Send registers to Amiga/PC"
+		BNE UploadNext		; Next command for unrecognized commands
+		LDA #<Registers		; Store $FBB0 in sysptr as start address of register range
 		STA sysptr
 		LDA #>Registers
 		STA sysptr+1
 		LDY #REGISTER_BYTECOUNT
 		JSR BeginUpload
 		LDA #$10
-		JSR WriteByte	; Write $10 to page 1 (Echo?)
-		JSR WriteRange	; Write Y values from ($F8) to page 1
+		JSR SendByte		; Write $10 to page 1 (Echo?)
+		JSR SendRange		; Write Y values from ($F8) to page 1
 		JSR EndUpload
 		JMP UploadNext
 
 UploadNext
-		JMP Upload		; Next upload command
+		JMP Upload			; Next upload command
 UploadDone
 		RTS
 
@@ -267,77 +267,81 @@ ReadMemory
 		LDA SuzyReadEnable
 		BNE .40
 		LDA sysptr+1
-		CMP #>SUZY_BASE	; Check if in Suzy space
+		CMP #>SUZY_BASE		; Check if in Suzy space
 		BNE .40
 		LDA sysptr
-		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
+		CMP #$84			; Do nothing for $FC84 and below (Unallocated address in Suzy)
 		BCC .41
-.40		LDA (sysptr)	; Load value at address
+.40		LDA (sysptr)		; Load value at address
 .41		RTS
 
-ReadWord
-		JSR ReadByte	; Read low byte in X
-		TAX				; 
-		JMP ReadByte	; Read high byte in A
+ReceiveWord
+		JSR ReceiveByte		; Read low byte in X
+		TAX
+		JMP ReceiveByte		; Read high byte in A
 
-ReadRange
+ReceiveRange
 ; Read Y bytes and store in memory location specified by sysptr
-		JSR ReadByte	; Read byte from parallel port
-		STA (sysptr)	; Store in address at $F8-$F9
-		INC sysptr		; Increase address
+		JSR ReceiveByte		; Read byte from parallel port
+		STA (sysptr)		; Store in address at $F8-$F9
+		INC sysptr			; Increase address
 		BNE .42
 		INC sysptr+1
 .42		DEY
-		BNE ReadRange	; Until Y is zero
+		BNE ReceiveRange	; Until Y is zero
 		RTS
 
-WriteRange
-		JSR ReadMemory	; Read memory value at ($00F8)
-		JSR WriteByte	; Write value to page 1
+SendRange
+		JSR ReadMemory		; Read memory value at ($00F8)
+		JSR SendByte		; Write value to page 1
 		INC sysptr
 		BNE .43
 		INC sysptr+1
 .43		DEY
-		BNE WriteRange
-		RTS				; Until Y values have been written
+		BNE SendRange
+		RTS					; Until Y values have been written
 
-ReadByte
-		JSR ReadPage8	; Read from page 8
-		BPL ReadByte	; Wait for bit 7 on strobe
-		JMP ReadPage9	; Read from page 9
+ReceiveByte
+		JSR ReadPage8		; Read from page 8
+		BPL ReceiveByte		; Wait for bit 7 on strobe
+		JMP ReadPage9		; Read from page 9
 
-WriteByte				; Write A to page 1, preserves A
+SendByte					; Write A to page 1, preserves A
 		PHA
-.44		JSR ReadPage8	; Read from page 8
-		BPL .44			; Wait for bit 7 on strobe
+.44		JSR ReadPage8		; Read from page 8
+		BPL .44				; Wait for bit 7 on strobe
 		PLA
-		JMP WritePage1	; Write A to page 1 and return
+		JMP WritePage1		; Write A to page 1 and return
 
 BeginUpload
-		JSR ReadPage8	; Read from page 8
+		JSR ReadPage8		; Read status from page 8
 		AND #$40
-		BEQ BeginUpload	; Wait for strobe
-		JSR Write0Page2	; Zero to page 2
-		JMP Write0Page7	; Zero to page 7 and return
+		BEQ BeginUpload		; Wait for strobe
+		JSR Write0Page2		; Zero to page 2
+		JMP Write0Page7		; Zero to page 7 and return
 
 EndUpload
-		JSR ReadPage8	; Read from page 8
-		BPL EndUpload	; Wait for bit 7 on strobe
-		JSR Write0Page6	; Zero to page 6
-		JMP Write0Page3	; Zero to page 3 and return
+		JSR ReadPage8		; Read from page 8
+		BPL EndUpload		; Wait for bit 7 on strobe
+		JSR Write0Page6		; Zero to page 6
+		JMP Write0Page3		; Zero to page 3 and return
 
-InitComm ; Preserves A
+NotifyHandyReset ; Preserves A
 		PHA
-.52		JSR ReadPage8	; Read from page 8
+; Wait for Amiga in TX mode
+.52		JSR ReadPage8		; Read status byte from page 8
 		AND #$40
-		BNE .52			; Wait for bit 6 on strobe
-		JSR Write0Page6	; Zero to page 6
-		JSR Write0Page7	; Zero to page 7
-.53		JSR ReadPage8	; Read from page 8
-		AND #$40		; Check if bit 6 was on strobe
-		BEQ .53			; Wait until strobe was received
-		JSR Write0Page6	; Zero to page 6
-		JSR Write0Page3	; Zero to page 3
+		BNE .52				; Wait for bit 6 on strobe
+; Switch to TX mode
+		JSR Write0Page6		; Zero to page 6
+		JSR Write0Page7		; Zero to page 7
+; Wait for Amiga in RX mode
+.53		JSR ReadPage8		; Read from page 8
+		AND #$40			; Check if bit 6 was on strobe
+		BEQ .53				; Wait until strobe was received
+; Switch to RX mode
+		JSR Write0Page6		; Zero to page 6
+		JSR Write0Page3		; Zero to page 3
 		PLA
 		RTS
 
@@ -354,24 +358,24 @@ Write0Page7
 Write0Page3
 		LDA #$03
 WriteCart1
-		JSR SetPage		; Set page number to 6, 2, 7 or 3
-		STZ RCART_1		; Write zero to indicate ACK?
+		JSR SetPage			; Set page number to 6, 2, 7 or 3
+		STZ RCART_1			; Write zero to indicate ACK?
 		RTS
 
 ReadPage8
-		LDA #$08		; Set page number to #08 for strobe
+		LDA #$08			; Set page number to #08 for strobe
 		BRA ReadCart1
 ReadPage9
 		LDA #$09
 ReadCart1
-		JSR SetPage		; Set page number to #09 for data
-		LDA RCART_1		; Read data from cart1 port
+		JSR SetPage			; Set page number to #09 for data
+		LDA RCART_1			; Read data from cart1 port
 		RTS
 
 ; Write A to page 1, preserves A
 WritePage1
 		PHA
-		LDA #$01		; Set page number to #01 for output (?)
+		LDA #$01			; Set page number to #01 for output (?)
 		JSR SetPage
 		PLA
 		STA RCART_1
@@ -381,7 +385,7 @@ SetPage
 		PHX
 		PHY
 		TAX
-		LDY #POWERON	; Strobe to 0 and reset ripple counter
+		LDY #POWERON		; Strobe to 0 and reset ripple counter
 		STY SYSCTL1
 		INY
 		LDA IODAT
@@ -422,13 +426,13 @@ SetPage
 .fe				.DS 1
 .ff				.DS 1
 
-RunAddr			.DS 2	; FBAE-FBAF
+RunAddr			.DS 2		; FBAE-FBAF
 Registers		.DS REGISTER_BYTECOUNT		; FBB0-FBB6
-Unused			.DS 1	; FBB7
-MAPCTL_RAM		.DS 1	; FBB8
-VERSION			.DS 1	; Version number?
-IODAT_RAM		.DS 1	; FBBA - Unused
-IODIR_RAM		.DS 1	; FBBB
+Unused			.DS 1		; FBB7
+MAPCTL_RAM		.DS 1		; FBB8
+VERSION			.DS 1		; Version number?
+IODAT_RAM		.DS 1		; FBBA - Unused
+IODIR_RAM		.DS 1		; FBBB
 
 * This code is called whenever a non-NMI interrupt occurs (either a hardware
 * interrupt or execution of a software BRK).
@@ -442,28 +446,28 @@ UserIntHandler			; FBBC
 		INX
 		INX
 		INX
-		LDA $0100,X		; Get a copy of the status byte
-		AND #$10		; Check break bit
-		BEQ hardInt		; and branch if clear (hardware int)
+		LDA $0100,X			; Get a copy of the status byte
+		AND #$10			; Check break bit
+		BEQ hardInt			; and branch if clear (hardware int)
 
 		PLX
 		PLA
-		JMP NmiHandler	; Same as NMI vector
+		JMP NmiHandler		; Same as NMI vector
 
 hardInt
 		;------	We had a hardware interrupt.
 		;------	Get the interrupt flags value, reset the bits
 		LDA INTSET
-		STA INTRST		; Clear all interrupts
-		LDX #$00		; Prepare IRQ jump table offset
-.00		BIT #$01		; Check if interrupt was triggered
+		STA INTRST			; Clear all interrupts
+		LDX #$00			; Prepare IRQ jump table offset
+.00		BIT #$01			; Check if interrupt was triggered
 		BEQ .01
 		JSR jumpIntTable
-.01		LSR A			; Move to next interrupt
-		INX				; Advance IRQ jump table offset
+.01		LSR A				; Move to next interrupt
+		INX					; Advance IRQ jump table offset
 		INX
-		CPX #$0E		; Verify if passing last entry in table
-		BCC .00			; Next iteration
+		CPX #$0E			; Verify if passing last entry in table
+		BCC .00				; Next iteration
 
 IntReturn
 		;------	At end of interrupt processing, restore the
@@ -473,8 +477,8 @@ IntReturn
 		RTI
 
 jumpIntTable
-		JMP (interrupt_buffer,X) 		; Jump to handler for this interrupt
+		JMP (interrupt_buffer,X) 	; Jump to handler for this interrupt
 
 		.ORG $FBEF
-SuzyReadEnable		.BYTE 1		; FBEF
+SuzyReadEnable		.BYTE 1	; FBEF
 interrupt_buffer	.WORD IrqStub, IrqStub, IrqStub, IrqStub, IrqStub, IrqStub, IrqStub, IrqStub

@@ -26,9 +26,9 @@ DIRECTION_OUTPUT		.EQ %00000000
 PORT_POUT		.DS 1	; $1583
 POUT			.EQ %10000000
 
-				.ORG 	$15D0
-LDRADD			.DS 3	; $15D0-$15D2 ; 20 bits of cartridge address
-ROMPAGE			.DS 1	; $15D3 Primary and secondary paging
+				.ORG $15D0
+LDRADD			.DS 3		; $15D0-$15D2 ; 20 bits of cartridge address
+ROMPAGE			.DS 1		; $15D3 Primary and secondary paging
 PAGESIZE_4096	.EQ	%00000000
 PAGESIZE_2048	.EQ	%00000001
 PAGESIZE_1024	.EQ	%00000010
@@ -39,7 +39,7 @@ PRIMARY_PAGING_MASK		.EQ	%00000111
 SECONDARY_PAGING_MASK	.EQ	%00111000
 
 				.ORG $15E0
-SEGWR			.DS 1 	; $15E0
+SEGWR			.DS 1 		; $15E0
 SEG				.EQ	%00000001	; 1 -> Remap 4000-7FFF in Handy RAM
 								; 0 -> No remapping of Handy RAM 
 
@@ -53,8 +53,7 @@ NMI_ORG			.EQ $3000
 		.ORG BASE_ORG
 
 DirectMemory	.DS 1	; Non-zero bypasses memory protection of $FC00+
-RunAddr			.DS 2
-
+RunAddr			.DS 2		; $0201-$0202
 Registers		.DS REGISTER_BYTECOUNT	; $0203-$0209
 BusMonitor		.DS MONITOR_BYTECOUNT	; $020A-$0219	Monitor values
 		.ORG BASE_ORG+$1E
@@ -77,7 +76,7 @@ NmiHandler	; $3000
 		STA Registers+A_OFFSET 			; Store accumulator, X and Y register for transfer
 		STX Registers+X_OFFSET
 		STY Registers+Y_OFFSET
-		PLA 			; Get status, low and high return address from stack
+		PLA 				; Get status, low and high return address from stack
 		PLX
 		PLY
 		STA Registers+P_OFFSET			; Store for inspection
@@ -96,7 +95,7 @@ NmiHandler	; $3000
 		JSR InitComm		; $32C7
 
 Main	; $3029
-		JSR ReadByte		; Read byte from parallel port
+		JSR ReceiveByte		; Read byte from parallel port
 
 		CMP #DOWNLOAD_REQUEST ; Control command: 01 means "Download"
 		BNE .2	
@@ -138,16 +137,16 @@ Main	; $3029
 		BNE .6
 		JSR BeginUpload
 		LDA #$00
-		JSR WriteByte	; Zero (A) to page 1
+		JSR SendByte		; Zero (A) to page 1
 		JSR EndUpload
-		JMP Main		; Next control command
+		JMP Main			; Next control command
 
 ; $3079
 .6		CMP #SEE_HOWARD_REQUEST
 		BNE .7
 		LDA #$01
 		STA HowardEnabled
-		STZ SEGWR		; No remapping of Handy RAM
+		STZ SEGWR			; No remapping of Handy RAM
 		JMP Main
 
 ; #3088
@@ -157,38 +156,38 @@ Main	; $3029
 		JMP Main
 
 ; $3092
-.8		JMP Main		; Next control command
+.8		JMP Main			; Next control command
 
 ; Control loop for downloading from Handebug to Howard
 Download
 ; $3095
-		JSR ReadByte
+		JSR ReceiveByte
 
 ; $3098
-		CMP #END_OF_FILE ; End of .bin file
-		BNE .11			; $309F
-		JMP Done		; $314F
+		CMP #END_OF_FILE	 ; End of .bin file
+		BNE .11
+		JMP Done
 
 ; $309F
-.11		CMP #ORIGIN		; Receive load address (1)
-		BNE .12			; $30AC
-		JSR ReadWord ; Read address from parallel port to X and A
+.11		CMP #ORIGIN			; Receive load address (1)
+		BNE .12
+		JSR ReceiveWord 	; Read address from parallel port to X and A
 		STX sysptr+LO
 		STA sysptr+HI
-		BRA Download	; $3095
+		BRA Download
 
 ; $30AC
 .12		CMP #DATA			; Load data of max 1-255 bytes (2)
 		BNE .13
-		JSR ReadByte		; Read byte from parallel port 
-		JSR ReadByte		; and another one, discarding first (potentially unused checksum)
+		JSR ReceiveByte		; Read byte from parallel port 
+		JSR ReceiveByte		; and another one, discarding first (potentially unused checksum)
 		TAY
 		JSR ReadRange		; Read Y number of bytes and store in ($00) ; $31CB
 		BRA Download
 
 .13		CMP #RUN_ADDRESS	; Receive run address (3)
-		BNE .14				; $30CB
-		JSR ReadWord 		; Read two bytes to X and A
+		BNE .14
+		JSR ReceiveWord 	; Read two bytes to X and A
 		STX RunAddr			; Store in a special place
 		STA RunAddr+1
 		BRA Download
@@ -196,43 +195,43 @@ Download
 ; 30CB
 .14		CMP #REGISTER		; Read registers from Amiga/PC
 		BNE .15
-		LDA #<Registers		; #$03 Store $0203 as address in $00, $01
+		LDA #<Registers
 		STA sysptr+LO
-		LDA #>Registers		; #$02
+		LDA #>Registers
 		STA sysptr+HI
 		LDY #REGISTER_BYTECOUNT	; Send 7 bytes from $0203 and up
-		JSR ReadHoward
+		JSR ReceiveHoward
 		BRA Download
 
 ; $30DE
-.15		CMP #FILL_MEM	; Fill Range with value: 11 Value Lo Hi Count
-		BNE .16			; $311E
-		JSR ReadByte	; Read fill value
+.15		CMP #FILL_MEM		; Fill Range with value: 11 Value Lo Hi Count
+		BNE .16
+		JSR ReceiveByte		; Read fill value
 		PHA
-		JSR ReadWord	; Read destination address
+		JSR ReceiveWord		; Read destination address
 		STX sysptr+LO
 		STA sysptr+HI
-		JSR ReadByte	; Read count #3295
+		JSR ReceiveByte		; Read count
 		TAY
 		LDA HowardEnabled	; Is Howard board enabled?
 		BNE .28
-		JSR $3278		; Remap memory address
+		JSR MapMemory		; Remap memory address
 		PLA
 .20		STA (sysptr2+LO)	; Store at remapped address
 		INC sysptr2+LO
 		BNE .21
 		STZ sysptr+LO
 		INC sysptr+HI
-		PHA				; Crossing page boundary, so remap
-		JSR $3278
-		PLA				; Restore fill value 
+		PHA					; Crossing page boundary, so remap
+		JSR MapMemory
+		PLA					; Restore fill value 
 .21		DEY
 		BNE .20
 		JMP Download
 
 ; $310F	Read when Howard board is enabled?
 .28
-		PLA				; Restore fill value
+		PLA					; Restore fill value
 .23
 		STA (sysptr+LO)		; Addresses when Howard is visible are unaltered
 		INC sysptr+LO
@@ -246,25 +245,25 @@ Download
 ; $311E
 .16
 		CMP #BUS_MONITOR
-		BNE .17			; $3132
+		BNE .17
 		LDA #<BusMonitor
 		STA sysptr+LO
 		LDA #>BusMonitor
 		STA sysptr+HI
 		LDY #MONITOR_BYTECOUNT
-		JSR ReadHoward	; $31EB
+		JSR ReceiveHoward
 		JMP Download
 
 ; $3132
 .17		CMP #LARGE_DATA
-		BNE .18			; $313F
-		JSR ReadWord		; Read length
+		BNE .18
+		JSR ReceiveWord		; Read length
 		JSR $31FA			; Handle large data routine
 		JMP Download
 
 ; 313F
 .18		CMP #ROM
-		BNE .19			; $314C
+		BNE .19
 		JSR $32F9
 		JSR DownloadROM
 		JMP Download
@@ -277,23 +276,23 @@ Done
 
 ; $3150
 Upload
-.30		JSR ReadByte
+		JSR ReceiveByte
 		CMP #END_OF_FILE
-		BNE .31			; $315A
-		JMP UploadDone	; $31C3
+		BNE .31
+		JMP UploadDone
 
 ; $315A
 .31		CMP #ORIGIN
-		BNE .32			; $3167
-		JSR ReadWord
+		BNE .32
+		JSR ReceiveWord
 		STX sysptr+LO
 		STA sysptr+HI
-		BRA .30			; $3150
+		BRA Upload
 
 ; $3167
 .32		CMP #DATA
-		BNE .33			; $3191
-		JSR ReadByte
+		BNE .33
+		JSR ReceiveByte
 		TAY
 		LDA sysptr+LO
 		STA sysptr3+LO
@@ -301,18 +300,18 @@ Upload
 		STA sysptr3+HI
 		JSR BeginUpload
 		LDA #DATA
-		JSR WriteByte
-		LDA VERSION		; Similar to $FBB9 in monitor.src
-		JSR WriteByte
+		JSR SendByte
+		LDA VERSION			; Similar to $FBB9 in monitor.src
+		JSR SendByte
 		TYA
-		JSR WriteByte	; Length
-		JSR WriteRange
+		JSR SendByte		; Length
+		JSR SendRange
 		JSR EndUpload
-		BRA .30
+		BRA Upload
 
 ; $3191
 .33		CMP #REGISTER
-		BNE .34			; $31AF
+		BNE .34
 		LDA #<Registers
 		STA sysptr+LO
 		LDA #>Registers
@@ -320,25 +319,25 @@ Upload
 		LDY #REGISTER_BYTECOUNT
 		JSR BeginUpload
 		LDA #REGISTER
-		JSR WriteByte
-		JSR $325A		; WriteRangeCore
+		JSR SendByte
+		JSR SendRangeCore
 		JSR EndUpload
 		BRA Upload
 
 ; $31AF
-.34		CMP #TRACE		; #$14
-		BNE .35			; $31B5
+.34		CMP #TRACE
+		BNE .35
 		BRA Upload
 
 ; $31B5
 .35		CMP #ROM
-		BNE .36			; $31C1
+		BNE .36
 		JSR $32F9
 		JSR UploadROM
 		BRA Upload
 
 ; $31C1
-.36						; Unrecognized upload type
+.36							; Unrecognized upload type
 		BRA Upload
 
 ; $31C3
@@ -346,23 +345,23 @@ UploadDone
 		RTS
 
 ; $31C4
-ReadWord
-		JSR ReadByte
+ReceiveWord
+		JSR ReceiveByte
 		TAX
-		JMP ReadByte
+		JMP ReceiveByte
 
 ; $31CB
 ReadRange
 		LDA HowardEnabled
-		BNE ReadHoward
-		JSR $3278
-.38		JSR ReadByte
+		BNE ReceiveHoward
+		JSR MapMemory
+.38		JSR ReceiveByte
 		STA (sysptr2+LO)
 		INC sysptr2+LO
-		BNE .37			; $31E3
+		BNE .37
 		STZ sysptr+LO
-		INC sysptr+HI
-		JSR $3278
+		INC sysptr+HI		; Page boundary crossed, so remap memory
+		JSR MapMemory
 .37		DEY
 		BNE .38
 		LDA sysptr2+LO
@@ -370,39 +369,36 @@ ReadRange
 		RTS
 
 ; $31EB
-ReadHoward	; Register Y is number of bytes to read
-.39		JSR ReadByte
+ReceiveHoward	; Register Y is number of bytes to read
+.39		JSR ReceiveByte
 		STA (sysptr+LO)
 		INC sysptr+LO
-		BNE .3A			; $31F6
+		BNE .3A
 		INC sysptr+HI
-; $31F6
 .3A		DEY
-		BNE .39			; $31EB
+		BNE ReceiveHoward
 		RTS
 
 ; $31FA
 ; Large data handling routine
 		LDY HowardEnabled
-		BNE .43			; $3222
-
+		BNE .43
 		TAY
 		TXA
-		BEQ .40			; $3204
+		BEQ .40
 		INY
-.40		JSR $3278
-.41		JSR ReadByte
+.40		JSR MapMemory
+.41		JSR ReceiveByte
 		STA (sysptr2+LO)
 		INC sysptr2+LO
-		BNE .42			; $3217
+		BNE .42
 		STZ sysptr+LO
 		INC sysptr+HI
-		JSR $3278
-; $3217
+		JSR MapMemory
 .42		DEX
-		BNE .41			; $3207
+		BNE .41
 		DEY
-		BNE .41			; $3207
+		BNE .41
 		LDA sysptr2+LO
 		STA sysptr+LO
 		RTS
@@ -410,91 +406,89 @@ ReadHoward	; Register Y is number of bytes to read
 ; $3222		Howard board is enabled
 .43		TAY
 		TXA
-		BEQ .44			; $3227
+		BEQ .44
 		INY
-.44		JSR ReadByte
+.44		JSR ReceiveByte
 		STA (sysptr+LO)
 		INC sysptr+LO
 		BNE .45
 		INC sysptr+HI
 .45		DEX
-		BNE .44			; $3227
+		BNE .44
 		DEY
-		BNE .44			; $3227
+		BNE .44
 		RTS
 
 ; $3239
-WriteRange
+SendRange
 		LDA HowardEnabled
-		BNE $325A
-		JSR $3278		; Memory switch
-; $3241
-.50		JSR $32E3
-		JSR WriteByte
+		BNE SendRangeCore
+		JSR MapMemory
+.50		JSR ReadMemory
+		JSR SendByte
 		INC sysptr2+LO
-		BNE .51			; $3252
+		BNE .51
 		STZ sysptr+LO
 		INC sysptr+HI
-		JSR $3278		; Memory switch
+		JSR MapMemory
 ; $3252
 .51		DEY
-		BNE .50			; $3241
+		BNE .50
 		LDA sysptr2+LO
 		STA sysptr+LO
 		RTS
 
 ; $325A
-WriteRangeCore
+SendRangeCore
 		LDA sysptr+LO
 		STA sysptr2+LO
 		LDA sysptr+HI
 		STA sysptr2+HI
-.53		JSR $32E3
-		JSR WriteByte
+.53		JSR ReadMemory
+		JSR SendByte
 		INC sysptr2+LO
-		BNE .52			; $3270
+		BNE .52
 		INC sysptr2+HI
 		INC sysptr+HI
 ; $3270
 .52		DEY
-		BNE .53			; $3262
+		BNE .53
 		LDA sysptr2+LO
 		STA sysptr+LO
 		RTS
 
 ; $3278
 ; Memory mapping function from sysptr to sysptr2
+MapMemory
 		LDA sysptr+LO
 		STA sysptr2+LO
 		LDA sysptr+HI
-		BMI .55			; $3292		; Normal memory for $8000 and higher
+		BMI .55				; Normal memory for $8000 and higher
 		CMP #$40
-		BCS .54		; Skip when sysptr+HI is $40-$7F
+		BCS .54				; Skip when sysptr+HI is $40-$7F
 		PHY
 		LDY #SEG
-		STY SEGWR		; Remap $0000-$3FFF to $4000-$7FFF in Handy RAM
+		STY SEGWR			; Remap $0000-$3FFF to $4000-$7FFF in Handy RAM
 		PLY
-		ORA #$40		; Adjust address to range
+		ORA #$40			; Adjust address to range
 		BRA .55
-; $328F
 .54
-		STZ SEGWR		; No remapping of Handy RAM
-; $3292
+		STZ SEGWR			; No remapping of Handy RAM
 .55		STA sysptr2+HI
 		RTS
 
 ; $3295
-ReadByte
+ReceiveByte
 		LDA PORT_STATUS
-		BPL ReadByte	; "When receiving data, DATA AVAILABLE goes HI when data has been received."
-		LDA {PORT_DATA}
+		BPL ReceiveByte		; "When receiving data, DATA AVAILABLE goes HI when data has been received."
+		LDA PORT_DATA
 		RTS
 
 ; $329E
-WriteByte
+SendByte
 		PHA
 .60		LDA PORT_STATUS
-		BPL .60		; "When sending data, DATA AVAILABLE goes LOW until the Amiga acknowledges the transfer."
+		BPL .60				; "When sending data, DATA AVAILABLE goes LOW until the Amiga acknowledges the transfer."
 		PLA
 		STA PORT_DATA
 		RTS
@@ -526,7 +520,7 @@ InitComm
 		BNE .61
 		LDA #DIRECTION_INPUT
 		STA PORT_DIRECTION
-		STA PORT_POUT		; DIRECTION_OUTPUT == POUT
+		STA PORT_POUT		; Lock for read?
 .62		LDA PORT_STATUS
 		AND #BUSY
 		BEQ .62
@@ -536,38 +530,37 @@ InitComm
 
 ; $32E3
 ReadMemory
-		LDA $0200
+		LDA DirectMemory
 		BNE .63
 		LDA sysptr2+HI
-		CMP #>SUZY_BASE	; Memory range below Suzy ($FC00) is safe
+		CMP #>SUZY_BASE		; Memory range below Suzy ($FC00) is safe
 		BNE .63
 		LDA sysptr2+LO 
 		BPL .64
-		CMP #$84		; Do nothing for $FC84 and below (Unallocated address in Suzy)
+		CMP #$84			; Do nothing for $FC84 and below (Unallocated address in Suzy)
 		BCC .64
 .63 	LDA (sysptr2+LO)
 .64 	RTS
 
-; $32F9					; Prepares ROM access
-		JSR ReadWord
-		STX LDRADD		; $15D0
-		STA LDRADD+1	; $15D1
-		JSR ReadByte
-		STA LDRADD+2	; $15D2		20-bit address for cartridge
-		JSR ReadByte	; Length to read LSB first to MSB last
-		EOR #$FF		; EXOR'ed to count up
+; $32F9		; Prepares ROM access
+		JSR ReceiveWord
+		STX LDRADD
+		STA LDRADD+1
+		JSR ReceiveByte
+		STA LDRADD+2		; 20-bit address for cartridge
+		JSR ReceiveByte		; Length to read LSB first to MSB last
+		EOR #$FF			; EXOR'ed to count up
 		STA CartRegister		
-		JSR ReadByte
+		JSR ReceiveByte
 		EOR #$FF
 		STA CartRegister+1
-		JSR ReadByte	; MSB of address
+		JSR ReceiveByte		; MSB of address
 		EOR #$FF
 		STA CartRegister+2
-		JSR ReadByte	; ???
+		JSR ReceiveByte		; ???
 		TAX
 		BMI .80
-		
-		AND #ROM_PAGING_MASK		; Page size is 3 bits (see ROMPAGE)
+		AND #ROM_PAGING_MASK	; Page size is 3 bits (see ROMPAGE)
 		STA PrimaryRomSize		; ROM primary memory paging
 		LDA #<RCARTEN
 		STA sysptr3+LO
@@ -577,7 +570,7 @@ ReadMemory
 
 ; $3335
 .80		AND #ROM_PAGING_MASK
-		STA SecondaryRomSize		; ROM secondary memory paging
+		STA SecondaryRomSize	; ROM secondary memory paging
 		LDA #<RCARTEN+1
 		STA sysptr3+LO
 		LDA #>RCARTEN
@@ -587,12 +580,12 @@ ReadMemory
 .81		LDA PrimaryRomSize
 		AND #ROM_PAGING_MASK
 		STA RomSizeTemp 
-		LDA SecondaryRomSize			; Secondary paging is at bits 3-5
+		LDA SecondaryRomSize	; Secondary paging is at bits 3-5
 		AND #ROM_PAGING_MASK	; Mask to make sure it is within 3 bits
 		ASL
 		ASL
 		ASL					; Shift to bits 3-5
-		ORA RomSizeTemp			; Combine with primary paging
+		ORA RomSizeTemp		; Combine with primary paging
 		STA ROMPAGE			; Set resulting ROM primary and secondary paging
 		STA ROMPAGE_RAM		; ROMPAGE_RAM Shadow address
 		RTS
@@ -611,7 +604,7 @@ DownloadROM
 		STA ROMPAGE			; Restore original ROM paging, as reading is finished
 		RTS
 		
-.82		JSR ReadByte
+.82		JSR ReceiveByte
 		STA (sysptr3+LO)	; Write address of current ROM section
 		BRA .83
 
@@ -635,5 +628,5 @@ UploadROM
 ; $33A0
 .85
 		LDA (sysptr3+LO) 
-		JSR WriteByte
+		JSR SendByte
 		BRA .84

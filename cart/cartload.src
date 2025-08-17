@@ -8,9 +8,9 @@
 
 	.LIST ON
 
-BASE_ORG	.EQ $2000
-LO			.EQ 0
-HI			.EQ 1
+BASE_ORG		.EQ $2000
+LO				.EQ 0
+HI				.EQ 1
 
 * ===========================================================================
 
@@ -48,19 +48,19 @@ CartSize		.DS 3	; $0B-$0C-$0D
 		JSR NotifyHandyReset
 
 ; Receive cartridge destination address
-		JSR ReadByte	; Receive byte for cartridge page
+		JSR ReceiveByte	; Receive byte for cartridge page
 		STA CartPage
-		JSR ReadByte
+		JSR ReceiveByte
 		STA CartOffsetLo
-		JSR ReadByte
+		JSR ReceiveByte
 		STA CartOffsetHi
 
 ; Receive 24-bits cartridge size
-		JSR ReadByte
+		JSR ReceiveByte
 		STA CartSize
-		JSR ReadByte
+		JSR ReceiveByte
 		STA CartSize+1
-		JSR ReadByte
+		JSR ReceiveByte
 		STA CartSize+2
 		STA Unknown2
 
@@ -71,7 +71,7 @@ CartSize		.DS 3	; $0B-$0C-$0D
 
 		LDA #$10		; Read 16 pages into RAM at $2200 to $37FF
 		STA PageCount
-.0		JSR ReadByte	; Receive and echo byte from parallel port Amiga
+.0		JSR ReceiveByte	; Receive and echo byte from parallel port Amiga
 		STA (sysptr)	; Store byte in ($0000) 
 		INC sysptr
 		BNE .0
@@ -112,16 +112,15 @@ CartSize		.DS 3	; $0B-$0C-$0D
 		JMP BASE_ORG	; Start program if requested
 
 ; Read and echo byte from page 9 to 1
-ReadByte
+ReceiveByte
 		JSR ReadPage8	; Read status byte from page 8
-		BPL ReadByte	; Wait for strobe on bit 7
+		BPL ReceiveByte	; Wait for strobe on bit 7
 		JMP ReadPage9	; Read from page 9 data (latch)
-
 		PHA
 .3		JSR ReadPage8	; Read status byte from page 8
 		BPL .3			; Wait for strobe again
 		PLA				; Restore A
-		JMP WriteByte	; Write A to page 1 and return (latch)
+		JMP SendByte	; Write A to page 1 and return (latch)
 
 ; Strobe (6), zero to 2, zero to 7
 BeginUpload
@@ -136,7 +135,7 @@ BeginUpload
 EndUpload
 		JSR ReadPage8	; Read status byte from page 8
 		BPL EndUpload	; Wait for strobe on bit 7
-; Switch to RX mode?
+; Switch to RX mode
 		JSR Write0Page6	; Write zero to page 6
 		JMP Write0Page3	; Write zero to page 3
 
@@ -146,16 +145,13 @@ NotifyHandyReset ; (Preserves A) init link
 .1		JSR ReadPage8	; Read status byte from page 8
 		AND #$40		; Check for bit 6
 		BNE .1			; Wait
-
 ; Switch to TX mode
 		JSR Write0Page6	; Zero to page 6
 		JSR Write0Page7	; Zero to page 7
-
 ; Wait for Amiga in RX mode
 .2		JSR ReadPage8	; Read status byte from page 8 
 		AND #$40
 		BEQ .2			; Wait for strobe bit 6 again
-
 ; Switch to RX mode
 		JSR Write0Page6	; Zero to page 6
 		JSR Write0Page3	; Zero to page 3
@@ -190,7 +186,7 @@ ReadCart1
 		RTS
 
 ; Write A to page 1, preserves A
-WriteByte		; Write latch
+SendByte		; Write latch
 		PHA
 		LDA #$01
 		JSR SetCartBlock1
