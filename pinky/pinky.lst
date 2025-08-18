@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    1
-                                                        11:40:58  
+Epyx HandyAsm 1.12      pinky.src                       13-Aug-12505:21:10 Page    1
+                                                        05:21:10  
 
     1                   * ====================================================
     2                   
@@ -59,17 +59,17 @@
    53 0225:A9 06        		LDA #06
    54 0227:20 ** **     		JSR OFFSET+SetPage	; Select cartridge page 6
    55 022A:9C B3 FC     		STZ RCART_1			; Write acknowledge
-Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    2
-                                                        11:40:58  
+Epyx HandyAsm 1.12      pinky.src                       13-Aug-12505:21:10 Page    2
+                                                        05:21:10  
 
-   56 022D:20 ** **     		JSR OFFSET+ReadWord	; Get address
+   56 022D:20 ** **     		JSR OFFSET+ReceiveWord	; Get address
    57 0230:86 F0        		STX loadptr+LO		; Set as both load and run address
    58 0232:86 F2        		STX runptr+LO
    59 0234:85 F1        		STA loadptr+HI
    60 0236:85 F3        		STA runptr+HI
-   61 0238:20 ** **     		JSR OFFSET+ReadWord	; Get length
+   61 0238:20 ** **     		JSR OFFSET+ReceiveWord	; Get length
    62 023B:A8           		TAY					; Y is MSB, X is LSB (2's complement)
-   63 023C:20 ** **     .1		JSR OFFSET+ReadByte	; Read program byte 
+   63 023C:20 ** **     .1		JSR OFFSET+ReceiveByte	; Read program byte 
    64 023F:92 F0        		STA (loadptr)		; Store at current load address
    65 0241:E6 F0        		INC loadptr+LO		; Next address
    66 0243:D0 **        		BNE .0
@@ -80,11 +80,11 @@
    71 024B:D0 EF        		BNE .1
    72 024D:6C F2 00     		JMP (runptr)		; Run program at run address
    73                   
-   74 0250:             ReadWord ; $3034
-   75 0250:20 ** **     		JSR OFFSET+ReadByte
+   74 0250:             ReceiveWord ; $3034
+   75 0250:20 ** **     		JSR OFFSET+ReceiveByte
    76 0253:AA           		TAX
    77                   
-   78 0254:             ReadByte ; 3038 Get a byte from parallel port
+   78 0254:             ReceiveByte ; 3038 Get a byte from parallel port
    79 0254:A9 08        		LDA #08
    80 0256:20 ** **     		JSR OFFSET+SetPage	; Select cartridge page 8
    81 0259:AD B3 FC     .0		LDA RCART_1			; Read strobe from port
@@ -121,8 +121,8 @@
     2 0283:00         + 		.BYTE $00
     3 0284:00         + 		.BYTE $00
     4 0285:00         + 		.BYTE $00
-Epyx HandyAsm 1.12      pinky                           22-Apr-12511:40:58 Page    3
-                        pinky.src                       11:40:58  
+Epyx HandyAsm 1.12      pinky.src                       13-Aug-12505:21:10 Page    3
+                        pinky.src                       05:21:10  
 
     5 0286:00         + 		.BYTE $00
     6 0287:00         + 		.BYTE $00
@@ -141,8 +141,8 @@
    19 0294:00         + 		.BYTE $00
    20 0295:00         + 		.BYTE $00
    21                 + 
-Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    4
-                                                        11:40:58  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12505:21:10 Page    4
+                                                        05:21:10  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -202,8 +202,8 @@ $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
 $FDAF GREENF                            $FC00 HARDWARE_START
 $FD00 HCOUNT                            $0020 HFLIP
-Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    5
-                                                        11:40:58  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12505:21:10 Page    5
+                                                        05:21:10  
 
 $0001 HI                                $FC05 HOFFH
 $FC04 HOFFL                             $0001 HORIZONTAL_INT
@@ -257,15 +257,15 @@ $0002 RIGHT1_SELECT                     $0004 RIGHT2_SELECT
 $0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
 $019A ROM_HEADER_SIZE                   $0004 ROM_SPACE
 $0002 RXBRK                             $0040 RXINTEN
-$0040 RXRDY                             $0254 ReadByte
-$0250 ReadWord                          $FC2D SCBADRH
+$0040 RXRDY                             $0254 ReceiveByte
+$0250 ReceiveWord                       $FC2D SCBADRH
 $FC2C SCBADRL                           $FC11 SCBNEXTH
 $FC10 SCBNEXTL                          $FC23 SCVPOSH
 $FC22 SCVPOSL                           $FD90 SDONEACK
 $FD8C SERCTL                            $FD8D SERDAT
 $FD10 SERIALRATE                        $0010 SERIAL_INT
-Epyx HandyAsm 1.12      Symbols                         22-Apr-12511:40:58 Page    6
-                                                        11:40:58  
+Epyx HandyAsm 1.12      Symbols                         13-Aug-12505:21:10 Page    6
+                                                        05:21:10  
 
 $0007 SHADOW_SPRITE                     $0080 SIGNMATH
 $0082 SIZE                              $0004 SKIP_SPRITE

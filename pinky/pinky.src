@@ -53,14 +53,14 @@ NmiHandler
 		LDA #06
 		JSR OFFSET+SetPage	; Select cartridge page 6
 		STZ RCART_1			; Write acknowledge
-		JSR OFFSET+ReadWord	; Get address
+		JSR OFFSET+ReceiveWord	; Get address
 		STX loadptr+LO		; Set as both load and run address
 		STX runptr+LO
 		STA loadptr+HI
 		STA runptr+HI
-		JSR OFFSET+ReadWord	; Get length
+		JSR OFFSET+ReceiveWord	; Get length
 		TAY					; Y is MSB, X is LSB (2's complement)
-.1		JSR OFFSET+ReadByte	; Read program byte 
+.1		JSR OFFSET+ReceiveByte	; Read program byte 
 		STA (loadptr)		; Store at current load address
 		INC loadptr+LO		; Next address
 		BNE .0
@@ -71,11 +71,11 @@ NmiHandler
 		BNE .1
 		JMP (runptr)		; Run program at run address
 
-ReadWord ; $3034
-		JSR OFFSET+ReadByte
+ReceiveWord ; $3034
+		JSR OFFSET+ReceiveByte
 		TAX
 
-ReadByte ; 3038 Get a byte from parallel port
+ReceiveByte ; 3038 Get a byte from parallel port
 		LDA #08
 		JSR OFFSET+SetPage	; Select cartridge page 8
 .0		LDA RCART_1			; Read strobe from port
