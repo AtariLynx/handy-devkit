@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    1
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    1
+                                                        11:46:53  
 
     1                   * ====================================================
     2                   
@@ -21,7 +21,7 @@
    24      0080         DIRECTION_INPUT			.EQ %10000000
    25      0000         DIRECTION_OUTPUT		.EQ %00000000
    26 1583:             PORT_POUT		.DS 1	; $1583
-   27      0080         POUT			.EQ %10000000
+   27      0080         POUT			.EQ %10000000	; Low indicates the LYNX is in in
    28                   
    29 1584:             				.ORG $15D0
    30 15D0:             LDRADD			.DS 3		; $15D0-$15D2 ; 20 bits of cartridge a
@@ -59,8 +59,8 @@
    14                   * 22 Mar 89	-RJ		Removed the audio variables from this
    15                   * 20 Mar 89	RG Goudy	Added several new zpage pointers
    16                   * 26 Jan 89	-RJ		Got rid of Interruptus
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    2
-                        6502:src/syszpage.src           04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    2
+                        6502:src/syszpage.src           11:46:53  
 
    17                   * 26-Dec-88	=RJ Mical=	Created this file from sysdata.
    18                   *
@@ -121,8 +121,8 @@
    72                   		.RUN *
    73                   
    74 3000:             NmiHandler	; $3000
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    3
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    3
+                                                        11:46:53  
 
    75 3000:D8           		CLD
    76 3001:8D 03 02     		STA Registers+A_OFFSET 			; Store accumulator, X and
@@ -183,8 +183,8 @@
   131 3060:AE 04 02     		LDX Registers+X_OFFSET
   132 3063:AC 05 02     		LDY Registers+Y_OFFSET
   133 3066:40           		RTI
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    4
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    4
+                                                        11:46:53  
 
   134                   
   135                   ; $3067
@@ -245,8 +245,8 @@
   190 30C0:20 ** **     		JSR ReceiveWord 	; Read two bytes to X and A
   191 30C3:8E 01 02     		STX RunAddr			; Store in a special place
   192 30C6:8D 02 02     		STA RunAddr+1
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    5
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    5
+                                                        11:46:53  
 
   193 30C9:80 CA        		BRA Download
   194                   
@@ -307,8 +307,8 @@
   249 3122:A9 0A        		LDA #<BusMonitor
   250 3124:85 00        		STA sysptr+LO
   251 3126:A9 02        		LDA #>BusMonitor
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    6
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    6
+                                                        11:46:53  
 
   252 3128:85 01        		STA sysptr+HI
   253 312A:A0 10        		LDY #MONITOR_BYTECOUNT
@@ -369,8 +369,8 @@
   308 3189:20 ** **     		JSR SendRange
   309 318C:20 ** **     		JSR EndUpload
   310 318F:80 BF        		BRA Upload
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    7
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    7
+                                                        11:46:53  
 
   311                   
   312                   ; $3191
@@ -431,8 +431,8 @@
   367 31E6:A5 02        		LDA sysptr2+LO
   368 31E8:85 00        		STA sysptr+LO
   369 31EA:60           		RTS
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    8
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    8
+                                                        11:46:53  
 
   370                   
   371                   ; $31EB
@@ -493,8 +493,8 @@
   426 323E:20 ** **     		JSR MapMemory
   427 3241:20 ** **     .50		JSR ReadMemory
   428 3244:20 ** **     		JSR SendByte
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page    9
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page    9
+                                                        11:46:53  
 
   429 3247:E6 02        		INC sysptr2+LO
   430 3249:D0 **        		BNE .51
@@ -555,8 +555,8 @@
   485 329D:60           		RTS
   486                   
   487                   ; $329E
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page   10
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page   10
+                                                        11:46:53  
 
   488 329E:             SendByte
   489 329E:48           		PHA
@@ -573,7 +573,7 @@
   500 32AE:F0 F9        		BEQ BeginUpload
   501 32B0:9C 82 15     		STZ PORT_DIRECTION	; Port direction to output
   502 32B3:A9 80        		LDA #POUT
-  503 32B5:8D 83 15     		STA PORT_POUT		; Pout on?
+  503 32B5:8D 83 15     		STA PORT_POUT		; Howard in output mode
   504 32B8:60           		RTS
   505                   
   506                   ; $32B9
@@ -582,7 +582,7 @@
   509 32BC:10 FB        		BPL EndUpload
   510 32BE:A9 80        		LDA #DIRECTION_INPUT
   511 32C0:8D 82 15     		STA PORT_DIRECTION
-  512 32C3:9C 83 15     		STZ PORT_POUT		; Pout off? 
+  512 32C3:9C 83 15     		STZ PORT_POUT		; Howard in input mode 
   513 32C6:60           		RTS
   514                   
   515                   ; $32C7
@@ -593,11 +593,11 @@
   520 32CD:D0 F9        		BNE .61
   521 32CF:A9 80        		LDA #DIRECTION_INPUT
   522 32D1:8D 82 15     		STA PORT_DIRECTION
-  523 32D4:8D 83 15     		STA PORT_POUT		; Lock for read?
+  523 32D4:8D 83 15     		STA PORT_POUT		; Howard in output mode
   524 32D7:AD 80 15     .62		LDA PORT_STATUS
   525 32DA:29 40        		AND #BUSY
   526 32DC:F0 F9        		BEQ .62
-  527 32DE:9C 83 15     		STZ PORT_POUT
+  527 32DE:9C 83 15     		STZ PORT_POUT		; Howard in input mode
   528 32E1:68           		PLA
   529 32E2:60           		RTS
   530                   
@@ -617,8 +617,8 @@
   544                   
   545                   ; $32F9		; Prepares ROM access
   546 32F9:20 C4 31     		JSR ReceiveWord
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page   11
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page   11
+                                                        11:46:53  
 
   547 32FC:8E D0 15     		STX LDRADD
   548 32FF:8D D1 15     		STA LDRADD+1
@@ -633,9 +633,9 @@
   557 3318:20 95 32     		JSR ReceiveByte		; MSB of address
   558 331B:49 FF        		EOR #$FF
   559 331D:8D 23 02     		STA CartRegister+2
-  560 3320:20 95 32     		JSR ReceiveByte		; ???
+  560 3320:20 95 32     		JSR ReceiveByte		; Status byte (see handebug-downloa
   561 3323:AA           		TAX
-  562 3324:30 **        		BMI .80
+  562 3324:30 **        		BMI .80				; LO for port 0 (primary) and HI for port
   563 3326:29 07        		AND #ROM_PAGING_MASK	; Page size is 3 bits (see ROMP
   564 3328:8D 24 02     		STA PrimaryRomSize		; ROM primary memory paging
   565 332B:A9 00        		LDA #<RCARTEN
@@ -679,8 +679,8 @@
   603 336E:AD 26 02     		LDA ROMPAGE_RAM
   604 3371:8D D3 15     		STA ROMPAGE			; Restore original ROM paging, as read
   605 3374:60           		RTS
-Epyx HandyAsm 1.12      howard.src                      13-Aug-12504:26:26 Page   12
-                                                        04:26:26  
+Epyx HandyAsm 1.12      howard.src                      28-Aug-12511:46:53 Page   12
+                                                        11:46:53  
 
   606                   		
   607 3375:20 95 32     .82		JSR ReceiveByte
@@ -710,8 +710,8 @@
   631 33A2:20 9E 32     		JSR SendByte
   632 33A5:80 E0        		BRA .84
   633                   
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:26:26 Page   13
-                                                        04:26:26  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:46:53 Page   13
+                                                        11:46:53  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -771,8 +771,8 @@ MACRO END_ZPAGE                         $0004 EVER_ON
 $0001 EXTERNAL_POWER                    $32B9 EndUpload
 $0080 FEEDBACK_7                        $0011 FILL_MEM
 $0004 FLIP_BUTTON                       $00C0 FOUR_PER_PIXEL
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:26:26 Page   14
-                                                        04:26:26  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:46:53 Page   14
+                                                        11:46:53  
 
 $0004 FRAMERR                           $0005 GO_REQUEST
 $FDA0 GREEN0                            $FDA1 GREEN1
@@ -833,8 +833,8 @@ $0002 PAGESIZE_1024                     $0001 PAGESIZE_2048
 $0004 PAGESIZE_256                      $0000 PAGESIZE_4096
 $0003 PAGESIZE_512                      $0001 PARBIT
 $0010 PAREN                             $0010 PARERR
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:26:26 Page   15
-                                                        04:26:26  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:46:53 Page   15
+                                                        11:46:53  
 
 $0001 PAREVEN                           $0001 PAUSE_SWITCH
 $FD93 PBKUP                             $0004 PC_OFFSET
@@ -895,8 +895,8 @@ $FC1E TILTL                             $FD00 TIMER0
 $0001 TIMER0_INT                        $FD04 TIMER1
 $0002 TIMER1_INT                        $FD08 TIMER2
 $0004 TIMER2_INT                        $FD0C TIMER3
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:26:26 Page   16
-                                                        04:26:26  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:46:53 Page   16
+                                                        11:46:53  
 
 $0008 TIMER3_INT                        $FD10 TIMER4
 $FD14 TIMER5                            $0020 TIMER5_INT

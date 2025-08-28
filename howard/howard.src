@@ -24,7 +24,7 @@ PORT_DIRECTION	.DS 1	; $1582
 DIRECTION_INPUT			.EQ %10000000
 DIRECTION_OUTPUT		.EQ %00000000
 PORT_POUT		.DS 1	; $1583
-POUT			.EQ %10000000
+POUT			.EQ %10000000	; Low indicates the LYNX is in input mode
 
 				.ORG $15D0
 LDRADD			.DS 3		; $15D0-$15D2 ; 20 bits of cartridge address
@@ -500,7 +500,7 @@ BeginUpload
 		BEQ BeginUpload
 		STZ PORT_DIRECTION	; Port direction to output
 		LDA #POUT
-		STA PORT_POUT		; Pout on?
+		STA PORT_POUT		; Howard in output mode
 		RTS
 
 ; $32B9
@@ -509,7 +509,7 @@ EndUpload
 		BPL EndUpload
 		LDA #DIRECTION_INPUT
 		STA PORT_DIRECTION
-		STZ PORT_POUT		; Pout off? 
+		STZ PORT_POUT		; Howard in input mode 
 		RTS
 
 ; $32C7
@@ -520,11 +520,11 @@ InitComm
 		BNE .61
 		LDA #DIRECTION_INPUT
 		STA PORT_DIRECTION
-		STA PORT_POUT		; Lock for read?
+		STA PORT_POUT		; Howard in output mode
 .62		LDA PORT_STATUS
 		AND #BUSY
 		BEQ .62
-		STZ PORT_POUT
+		STZ PORT_POUT		; Howard in input mode
 		PLA
 		RTS
 
@@ -557,9 +557,9 @@ ReadMemory
 		JSR ReceiveByte		; MSB of address
 		EOR #$FF
 		STA CartRegister+2
-		JSR ReceiveByte		; ???
+		JSR ReceiveByte		; Status byte (see handebug-downloading document)
 		TAX
-		BMI .80
+		BMI .80				; LO for port 0 (primary) and HI for port 1 (secondary)
 		AND #ROM_PAGING_MASK	; Page size is 3 bits (see ROMPAGE)
 		STA PrimaryRomSize		; ROM primary memory paging
 		LDA #<RCARTEN
