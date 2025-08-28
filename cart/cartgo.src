@@ -141,7 +141,7 @@ InitSuzy
 		LDA #$01			; Load main file using second directory entry
 		JSR ReadFile		; $032E
 #IFDEF HOWARD
-		.BY $13				; Trigger Howard software break
+		HBRK				; Trigger Howard software break
 #ELSE
 		BRK					; Trigger Pinky software break
 		NOP
@@ -160,13 +160,16 @@ ReadPages					; Reads first two pages of cartridge. Checks correct page size
 ; Reads and verifies pages from cartridge
 ; Accumulator holds page number. 
 ; If block loaded correctly returns with carry set and X zero, otherwise with carry clear
+; Reading beyond page boundary will automatically return to first entry of same page.
+; When pagesize is correct, this gives the same values after two individual loops, when 
+; page was only set on first run. 
 ReadPage
-		JSR SetCartPage		; Select page number
+		JSR SetCartPage		; Select page number only once
 		LDA #$00			; Change branch to go to next instruction
-		JSR LoadVerifyPage	; $0294 First run AccessDir
+		JSR LoadVerifyPage	; First run loads and stores values
 		CLC					; Carry flag becomes important
 		LDA #$0A			; Restore original branch offset (.21-branch)
-;		BRA LoadVerifyPage
+;		BRA LoadVerifyPage    Second run will load (and store), but also actually compare
 
 ; 0294
 ; Reads or verifies a page

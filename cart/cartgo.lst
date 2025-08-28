@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    1
-                                                        14:11:35  
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    1
+                                                        11:53:52  
 
     1                   * ====================================================
     2                   
@@ -59,8 +59,8 @@
    60                   		.RU *
    61                   
    62 0200:78           		SEI
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    2
-                                                        14:11:35  
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    2
+                                                        11:53:52  
 
    63                   
    64                   ; Initialize Mikey
@@ -71,405 +71,415 @@
    69 020C:CA           		DEX
    70 020D:10 F4        		BPL .0
    71                   
-   72      FALSE        #IFDEF HOWARD
+   72      TRUE         #IFDEF HOWARD
+   73                   ; Setup NMI interrupt address
+   74 020F:A9 08        		LDA #VECTOR_SPACE
+   75 0211:8D F9 FF     		STA MAPCTL
+   76 0214:9C FA FF     		STZ CPU_NMI+LO
+   77 0217:A9 30        		LDA #>NMI_ORG
+   78 0219:8D FB FF     		STA CPU_NMI+HI
    79                   #ENDIF
    80                   
    81                   ; Cartridge sizes can be 256 (64KB), 512 bytes (128KB)
    82                   ; 020F
-   83 020F:             DeterminePageSize
-   84 020F:64 06        		STZ CartPageSize
-   85 0211:38           		SEC
-   86 0212:26 06        .1		ROL CartPageSize	; Loop 1 bit from left to right 
-   87 0214:20 ** **     		JSR ReadPages
-   88 0217:90 F9        		BCC .1				; Carry clear means not right block size
+   83 021C:             DeterminePageSize
+   84 021C:64 06        		STZ CartPageSize
+   85 021E:38           		SEC
+   86 021F:26 06        .1		ROL CartPageSize	; Loop 1 bit from left to right 
+   87 0221:20 ** **     		JSR ReadPages
+   88 0224:90 F9        		BCC .1				; Carry clear means not right block size
    89                   
-   90 0219:A9 9A        		LDA #<ROM_HEADER_SIZE
-   91 021B:85 07        		STA CartAddr+LO		; Offset to directory after 410 byt
-   92 021D:A9 01        		LDA #>ROM_HEADER_SIZE
-   93 021F:85 08        		STA CartAddr+HI
-   94 0221:20 ** **     		JSR CheckFiles		; Sanity check for first two directo
+   90 0226:A9 9A        		LDA #<ROM_HEADER_SIZE
+   91 0228:85 07        		STA CartAddr+LO		; Offset to directory after 410 byt
+   92 022A:A9 01        		LDA #>ROM_HEADER_SIZE
+   93 022C:85 08        		STA CartAddr+HI
+   94 022E:20 ** **     		JSR CheckFiles		; Sanity check for first two directo
    95                   
-   96 0224:B0 **        		BCS .4
-   97 0226:64 07        		STZ CartAddr+LO
-   98 0228:A9 02        		LDA #$02
-   99 022A:85 08        		STA CartAddr+HI		; $0200 to dataptr
+   96 0231:B0 **        		BCS .4
+   97 0233:64 07        		STZ CartAddr+LO
+   98 0235:A9 02        		LDA #$02
+   99 0237:85 08        		STA CartAddr+HI		; $0200 to dataptr
   100                   
-  101 022C:A9 00        .4		LDA #$00			; Read first file
-  102 022E:20 ** **     		JSR ReadFile
-  103 0231:A5 12        		LDA CartDirectory+ROMDIR_DEST+LO
-  104 0233:85 02        		STA dataptr+LO		; Start of first file with palette a
-  105 0235:18           		CLC
-  106 0236:69 20        		ADC #$20			; Locate end of color palette
-  107 0238:8D 10 FC     		STA SCBNEXTL		; Beginning of SCB definition 
-  108 023B:A5 13        		LDA CartDirectory+ROMDIR_DEST+HI
-  109 023D:85 03        		STA dataptr+HI
-  110 023F:69 00        		ADC #$00			; Add any carry from low byte addition of
-  111 0241:8D 11 FC     		STA SCBNEXTH
-  112 0244:A0 1F        		LDY #$1F
-  113 0246:B1 02        .3		LDA (dataptr),y
-  114 0248:99 A0 FD     		STA GREEN0,y		; Green color map
-  115 024B:88           		DEY
-  116 024C:10 F8        		BPL .3
+  101 0239:A9 00        .4		LDA #$00			; Read first file
+  102 023B:20 ** **     		JSR ReadFile
+  103 023E:A5 12        		LDA CartDirectory+ROMDIR_DEST+LO
+  104 0240:85 02        		STA dataptr+LO		; Start of first file with palette a
+  105 0242:18           		CLC
+  106 0243:69 20        		ADC #$20			; Locate end of color palette
+  107 0245:8D 10 FC     		STA SCBNEXTL		; Beginning of SCB definition 
+  108 0248:A5 13        		LDA CartDirectory+ROMDIR_DEST+HI
+  109 024A:85 03        		STA dataptr+HI
+  110 024C:69 00        		ADC #$00			; Add any carry from low byte addition of
+  111 024E:8D 11 FC     		STA SCBNEXTH
+  112 0251:A0 1F        		LDY #$1F
+  113 0253:B1 02        .3		LDA (dataptr),y
+  114 0255:99 A0 FD     		STA GREEN0,y		; Green color map
+  115 0258:88           		DEY
+  116 0259:10 F8        		BPL .3
   117                   
-  118 024E:             InitSuzy
-  119 024E:A2 **        		LDX #SUZYVALS_COUNT
-  120 0250:BD ** **     .10		LDA SuzyValues,x
-  121 0253:BC ** **     		LDY SuzyOffsets,x
-  122 0256:99 00 FC     		STA SUZY_BASE,y
-  123 0259:CA           		DEX
-  124 025A:10 F4        		BPL .10
+  118 025B:             InitSuzy
+  119 025B:A2 **        		LDX #SUZYVALS_COUNT
+  120 025D:BD ** **     .10		LDA SuzyValues,x
+  121 0260:BC ** **     		LDY SuzyOffsets,x
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    3
+                                                        11:53:52  
+
+  122 0263:99 00 FC     		STA SUZY_BASE,y
+  123 0266:CA           		DEX
+  124 0267:10 F4        		BPL .10
   125                   
   126                   ; Wait for longer time unless joystick or buttons are 
-  127 025C:9C 91 FD     		STZ CPUSLEEP
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    3
-                                                        14:11:35  
-
-  128 025F:A2 20        		LDX #$20
-  129 0261:AD B0 FC     .13		LDA JOYSTICK
-  130 0264:D0 **        		BNE .11
-  131 0266:1A           .12		INC A
-  132 0267:D0 FD        		BNE .12
-  133 0269:C8           		INY					; Y is #$2A after Suzy initialization
-  134 026A:D0 F5        		BNE .13
-  135 026C:CA           		DEX
-  136 026D:D0 F2        		BNE .13
-  137 026F:A2 1F        .11		LDX #$1F			; Clear color map to black
-  138 0271:9E A0 FD     .14		STZ GREEN0,x
-  139 0274:CA           		DEX
-  140 0275:10 FA        		BPL .14
-  141 0277:A9 01        		LDA #$01			; Load main file using second directory e
-  142 0279:20 ** **     		JSR ReadFile		; $032E
-  143      FALSE        #IFDEF HOWARD
+  127 0269:9C 91 FD     		STZ CPUSLEEP
+  128 026C:A2 20        		LDX #$20
+  129 026E:AD B0 FC     .13		LDA JOYSTICK
+  130 0271:D0 **        		BNE .11
+  131 0273:1A           .12		INC A
+  132 0274:D0 FD        		BNE .12
+  133 0276:C8           		INY					; Y is #$2A after Suzy initialization
+  134 0277:D0 F5        		BNE .13
+  135 0279:CA           		DEX
+  136 027A:D0 F2        		BNE .13
+  137 027C:A2 1F        .11		LDX #$1F			; Clear color map to black
+  138 027E:9E A0 FD     .14		STZ GREEN0,x
+  139 0281:CA           		DEX
+  140 0282:10 FA        		BPL .14
+  141 0284:A9 01        		LDA #$01			; Load main file using second directory e
+  142 0286:20 ** **     		JSR ReadFile		; $032E
+  143      TRUE         #IFDEF HOWARD
+  144                   		HBRK				; Trigger Howard software break
+    1 0289:13         + 	.HS 13
+    2                 + 
   145                   #ELSE
-  146 027C:00           		BRK					; Trigger Pinky software break
-  147 027D:EA           		NOP
   148                   #ENDIF
-  149 027E:6C 12 00     		JMP (CartDirectory+ROMDIR_DEST)
+  149 028A:6C 12 00     		JMP (CartDirectory+ROMDIR_DEST)
   150                   
   151                   ; 0281
-  152 0281:             ReadPages					; Reads first two pages of cartridge. Ch
-  153 0281:A9 01        		LDA #$01			; Page 1
-  154 0283:20 ** **     		JSR ReadPage
-  155 0286:90 **        		BCC abort			; Abort reading
-  156 0288:8A           		TXA					; Page 0
+  152 028D:             ReadPages					; Reads first two pages of cartridge. Ch
+  153 028D:A9 01        		LDA #$01			; Page 1
+  154 028F:20 ** **     		JSR ReadPage
+  155 0292:90 **        		BCC abort			; Abort reading
+  156 0294:8A           		TXA					; Page 0
   157                   ;		BRA ReadPage		; Fall into ReadPage for second time
   158                   
   159                   ; 0289
   160                   ; Reads and verifies pages from cartridge
   161                   ; Accumulator holds page number. 
   162                   ; If block loaded correctly returns with carry set and
-  163 0289:             ReadPage
-  164 0289:20 ** **     		JSR SetCartPage		; Select page number
-  165 028C:A9 00        		LDA #$00			; Change branch to go to next instruction
-  166 028E:20 ** **     		JSR LoadVerifyPage	; $0294 First run AccessDir
-  167 0291:18           		CLC					; Carry flag becomes important
-  168 0292:A9 0A        		LDA #$0A			; Restore original branch offset (.21-bra
-  169                   ;		BRA LoadVerifyPage
-  170                   
-  171                   ; 0294
-  172                   ; Reads or verifies a page
-  173                   ; A determines action: load: #$00, verify: #$0A
-  174                   ; Returns carry set and X zero when loaded or verified
-  175 0294:             LoadVerifyPage
-  176 0294:8D ** **     		STA branch+1		; Self-modify code to make branch a NO
-  177 0297:A6 06        		LDX CartPageSize	; Read CartPageSize times 256 bytes
-  178 0299:A9 00        		LDA #$00			; Pointer to $2400
-  179 029B:85 02        		STA dataptr
-  180 029D:A9 24        		LDA #$24
-  181 029F:85 03        		STA dataptr+1
-  182 02A1:A0 00        		LDY #$00
-  183 02A3:AD B2 FC     .20		LDA RCART_0
-  184 02A6:D1 02        		CMP (dataptr),y
-  185 02A8:91 02        		STA (dataptr),y
-  186                   
-  187      02AA         branch	.= *
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    4
-                                                        14:11:35  
+  163                   ; Reading beyond page boundary will automatically retu
+  164                   ; When pagesize is correct, this gives the same values
+  165                   ; page was only set on first run. 
+  166 0295:             ReadPage
+  167 0295:20 ** **     		JSR SetCartPage		; Select page number only once
+  168 0298:A9 00        		LDA #$00			; Change branch to go to next instruction
+  169 029A:20 ** **     		JSR LoadVerifyPage	; First run loads and stores valu
+  170 029D:18           		CLC					; Carry flag becomes important
+  171 029E:A9 0A        		LDA #$0A			; Restore original branch offset (.21-bra
+  172                   ;		BRA LoadVerifyPage    Second run will load (and sto
+  173                   
+  174                   ; 0294
+  175                   ; Reads or verifies a page
+  176                   ; A determines action: load: #$00, verify: #$0A
+  177                   ; Returns carry set and X zero when loaded or verified
+  178 02A0:             LoadVerifyPage
+  179 02A0:8D ** **     		STA branch+1		; Self-modify code to make branch a NO
+  180 02A3:A6 06        		LDX CartPageSize	; Read CartPageSize times 256 bytes
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    4
+                                                        11:53:52  
 
-  188 02AA:D0 **        		BNE verify_error	; On first pass this is essentially
-  189 02AC:C8           		INY
-  190 02AD:D0 F4        		BNE .20
-  191 02AF:E6 03        		INC dataptr+1
-  192 02B1:CA           		DEX					; Next 256 bytes in this page
-  193 02B2:D0 EF        		BNE .20
-  194 02B4:38           		SEC					; Carry set conveys result of a match
-  195 02B5:             abort
-  196 02B5:60           		RTS
-  197                   
-  198 02B6:             verify_error
-  199 02B6:18           		CLC					; Carry clear means block was not loaded cor
-  200 02B7:60           		RTS
-  201                   
-  202                   ; Performs routine OpenFile potentially twice
-  203                   ; 02B8
-  204 02B8:             CheckFiles
-  205 02B8:A9 00        		LDA #$00			; File number for boot screen
-  206 02BA:A2 DC        		LDX #$DC			; Load address should be $2400 or higher,
-  207 02BC:20 ** **     		JSR CheckFile		; is $100 - $24 is $DC to add actual 
-  208 02BF:90 **        		BCC check_failed
-  209 02C1:A9 01        		LDA #$01			; File number for main file
-  210 02C3:A2 FC        		LDX #$FC			; Load address is required to be $0400 or
-  211                   ;		BRA CheckFile		; Fall through
-  212                   
-  213                   ; Checks a file entry in directory and whether offset 
-  214                   ; A holds file number and X minimum load address (minu
-  215                   ; 02C5
-  216 02C5:             CheckFile
-  217 02C5:DA           		PHX
-  218 02C6:20 ** **     		JSR OpenFile
-  219 02C9:68           		PLA
-  220 02CA:18           		CLC
-  221 02CB:65 13        		ADC CartDirectory+ROMDIR_DEST+HI
-  222 02CD:90 **        		BCC check_failed
-  223 02CF:A5 06        		LDA CartPageSize
-  224 02D1:C5 10        		CMP CartDirectory+ROMDIR_OFFSET+HI	; High byte of of
-  225 02D3:             check_failed
-  226 02D3:60           		RTS									; (expressed in blocks of 256 bytes)
-  227                   
-  228                   ; Opens a file from a directory entry
-  229                   ; A is file number, CartOffsetLow holds address of dir
-  230 02D4:             OpenFile
-  231                   ; 02D4
-  232 02D4:A6 06        		LDX CartPageSize
-  233 02D6:CA           		DEX					; Determine mask for offset within page
-  234 02D7:86 01        		STX ztemp2
-  235 02D9:             GetDirAddress
-  236 02D9:64 00        		STZ ztemp1
-  237 02DB:0A           		ASL A
-  238 02DC:26 00        		ROL ztemp1
-  239 02DE:0A           		ASL A
-  240 02DF:26 00        		ROL ztemp1
-  241 02E1:0A           		ASL A				; File number times 8 (three shift lefts) f
-  242 02E2:26 00        		ROL ztemp1			; Second byte for file numbers higher t
-  243 02E4:65 07        		ADC CartAddr+LO		; Calculate address of directory en
-  244 02E6:AA           		TAX					; Store low byte of offset in X
-  245 02E7:A5 00        		LDA ztemp1		
-  246 02E9:65 08        		ADC CartAddr+HI
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    5
-                                                        14:11:35  
+  181 02A5:A9 00        		LDA #$00			; Pointer to $2400
+  182 02A7:85 02        		STA dataptr
+  183 02A9:A9 24        		LDA #$24
+  184 02AB:85 03        		STA dataptr+1
+  185 02AD:A0 00        		LDY #$00
+  186 02AF:AD B2 FC     .20		LDA RCART_0
+  187 02B2:D1 02        		CMP (dataptr),y
+  188 02B4:91 02        		STA (dataptr),y
+  189                   
+  190      02B6         branch	.= *
+  191 02B6:D0 **        		BNE verify_error	; On first pass this is essentially
+  192 02B8:C8           		INY
+  193 02B9:D0 F4        		BNE .20
+  194 02BB:E6 03        		INC dataptr+1
+  195 02BD:CA           		DEX					; Next 256 bytes in this page
+  196 02BE:D0 EF        		BNE .20
+  197 02C0:38           		SEC					; Carry set conveys result of a match
+  198 02C1:             abort
+  199 02C1:60           		RTS
+  200                   
+  201 02C2:             verify_error
+  202 02C2:18           		CLC					; Carry clear means block was not loaded cor
+  203 02C3:60           		RTS
+  204                   
+  205                   ; Performs routine OpenFile potentially twice
+  206                   ; 02B8
+  207 02C4:             CheckFiles
+  208 02C4:A9 00        		LDA #$00			; File number for boot screen
+  209 02C6:A2 DC        		LDX #$DC			; Load address should be $2400 or higher,
+  210 02C8:20 ** **     		JSR CheckFile		; is $100 - $24 is $DC to add actual 
+  211 02CB:90 **        		BCC check_failed
+  212 02CD:A9 01        		LDA #$01			; File number for main file
+  213 02CF:A2 FC        		LDX #$FC			; Load address is required to be $0400 or
+  214                   ;		BRA CheckFile		; Fall through
+  215                   
+  216                   ; Checks a file entry in directory and whether offset 
+  217                   ; A holds file number and X minimum load address (minu
+  218                   ; 02C5
+  219 02D1:             CheckFile
+  220 02D1:DA           		PHX
+  221 02D2:20 ** **     		JSR OpenFile
+  222 02D5:68           		PLA
+  223 02D6:18           		CLC
+  224 02D7:65 13        		ADC CartDirectory+ROMDIR_DEST+HI
+  225 02D9:90 **        		BCC check_failed
+  226 02DB:A5 06        		LDA CartPageSize
+  227 02DD:C5 10        		CMP CartDirectory+ROMDIR_OFFSET+HI	; High byte of of
+  228 02DF:             check_failed
+  229 02DF:60           		RTS									; (expressed in blocks of 256 bytes)
+  230                   
+  231                   ; Opens a file from a directory entry
+  232                   ; A is file number, CartOffsetLow holds address of dir
+  233 02E0:             OpenFile
+  234                   ; 02D4
+  235 02E0:A6 06        		LDX CartPageSize
+  236 02E2:CA           		DEX					; Determine mask for offset within page
+  237 02E3:86 01        		STX ztemp2
+  238 02E5:             GetDirAddress
+  239 02E5:64 00        		STZ ztemp1
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    5
+                                                        11:53:52  
 
-  247 02EB:48           		PHA					; Push high byte of address
-  248 02EC:25 01        		AND ztemp2			; Mask out any overflow to get page-rel
-  249 02EE:A8           		TAY					; Store high byte of offset in Y
-  250 02EF:68           		PLA					; Load high byte of address again
-  251 02F0:             .26
-  252 02F0:46 01        		LSR ztemp2			; Determine page number by dividing by 
-  253 02F2:90 **        		BCC .30
-  254 02F4:4A           		LSR A
-  255 02F5:80 F9        		BRA .26
-  256                   
-  257                   ;OpenFile0					; See also cart.src from 6502:src in Ha
-  258 02F7:20 ** **     .30		JSR SetCartAddress
-  259 02FA:A9 09        		LDA #<{ROMDIR_ENTRY_SIZE+1}	; Add one to 
-  260 02FC:85 0C        		STA CartIOCount+LO
-  261 02FE:A9 01        		LDA #>{ROMDIR_ENTRY_SIZE+$100}
-  262 0300:85 0D        		STA CartIOCount+HI
-  263 0302:A9 0E        		LDA #<CartDirectory			; Load directory entry bytes i
-  264 0304:85 04        		STA sysptr+LO
-  265 0306:A9 00        		LDA #>CartDirectory
-  266 0308:85 05        		STA sysptr+HI
-  267 030A:20 ** **     		JSR ReadCart0Grunt			; Read actual bytes from cartri
-  268                   
-  269 030D:A5 0E        		LDA CartDirectory+ROMDIR_PAGE
-  270 030F:A6 0F        		LDX CartDirectory+ROMDIR_OFFSET+LO
-  271 0311:A4 10        		LDY CartDirectory+ROMDIR_OFFSET+HI
-  272                   
-  273                   ; Set cart offset into page
-  274 0313:             SetCartAddress
-  275 0313:85 0B        		STA CartPage
-  276 0315:86 09        		STX CartOffsetLow
-  277 0317:84 0A        		STY CartOffsetHi
-  278 0319:20 ** **     		JSR SetCartPage
-  279                   ;		BRA SetCartOffset
-  280                   
-  281 031C:             SetCartOffset
-  282 031C:A4 0A        		LDY CartOffsetHi
-  283 031E:A6 09        		LDX CartOffsetLow
-  284 0320:C8           		INY					; Add one to allow counting to zero
-  285 0321:E8           		INX					; Same
-  286 0322:80 **        		BRA .31
-  287 0324:AD B2 FC     .32		LDA RCART_0			; Dummy reads to advance ripple cou
-  288 0327:CA           .31		DEX
-  289 0328:D0 FA        		BNE .32
-  290 032A:88           		DEY
-  291 032B:D0 F7        		BNE .32
-  292                   
-  293                   ;		RESTORE_CART		; Unlike cart.src function does not r
-  294 032D:60           		RTS
+  240 02E7:0A           		ASL A
+  241 02E8:26 00        		ROL ztemp1
+  242 02EA:0A           		ASL A
+  243 02EB:26 00        		ROL ztemp1
+  244 02ED:0A           		ASL A				; File number times 8 (three shift lefts) f
+  245 02EE:26 00        		ROL ztemp1			; Second byte for file numbers higher t
+  246 02F0:65 07        		ADC CartAddr+LO		; Calculate address of directory en
+  247 02F2:AA           		TAX					; Store low byte of offset in X
+  248 02F3:A5 00        		LDA ztemp1		
+  249 02F5:65 08        		ADC CartAddr+HI
+  250 02F7:48           		PHA					; Push high byte of address
+  251 02F8:25 01        		AND ztemp2			; Mask out any overflow to get page-rel
+  252 02FA:A8           		TAY					; Store high byte of offset in Y
+  253 02FB:68           		PLA					; Load high byte of address again
+  254 02FC:             .26
+  255 02FC:46 01        		LSR ztemp2			; Determine page number by dividing by 
+  256 02FE:90 **        		BCC .30
+  257 0300:4A           		LSR A
+  258 0301:80 F9        		BRA .26
+  259                   
+  260                   ;OpenFile0					; See also cart.src from 6502:src in Ha
+  261 0303:20 ** **     .30		JSR SetCartAddress
+  262 0306:A9 09        		LDA #<{ROMDIR_ENTRY_SIZE+1}	; Add one to 
+  263 0308:85 0C        		STA CartIOCount+LO
+  264 030A:A9 01        		LDA #>{ROMDIR_ENTRY_SIZE+$100}
+  265 030C:85 0D        		STA CartIOCount+HI
+  266 030E:A9 0E        		LDA #<CartDirectory			; Load directory entry bytes i
+  267 0310:85 04        		STA sysptr+LO
+  268 0312:A9 00        		LDA #>CartDirectory
+  269 0314:85 05        		STA sysptr+HI
+  270 0316:20 ** **     		JSR ReadCart0Grunt			; Read actual bytes from cartri
+  271                   
+  272 0319:A5 0E        		LDA CartDirectory+ROMDIR_PAGE
+  273 031B:A6 0F        		LDX CartDirectory+ROMDIR_OFFSET+LO
+  274 031D:A4 10        		LDY CartDirectory+ROMDIR_OFFSET+HI
+  275                   
+  276                   ; Set cart offset into page
+  277 031F:             SetCartAddress
+  278 031F:85 0B        		STA CartPage
+  279 0321:86 09        		STX CartOffsetLow
+  280 0323:84 0A        		STY CartOffsetHi
+  281 0325:20 ** **     		JSR SetCartPage
+  282                   ;		BRA SetCartOffset
+  283                   
+  284 0328:             SetCartOffset
+  285 0328:A4 0A        		LDY CartOffsetHi
+  286 032A:A6 09        		LDX CartOffsetLow
+  287 032C:C8           		INY					; Add one to allow counting to zero
+  288 032D:E8           		INX					; Same
+  289 032E:80 **        		BRA .31
+  290 0330:AD B2 FC     .32		LDA RCART_0			; Dummy reads to advance ripple cou
+  291 0333:CA           .31		DEX
+  292 0334:D0 FA        		BNE .32
+  293 0336:88           		DEY
+  294 0337:D0 F7        		BNE .32
   295                   
-  296                   ; 032E
-  297                   ; Reads file with number specified in A
-  298 032E:             ReadFile
-  299 032E:20 D4 02     		JSR OpenFile		; CartDirectory holds entry number fro
-  300 0331:A5 15        		LDA CartDirectory+ROMDIR_SIZE+HI
-  301 0333:1A           		INC A				; Add one to count down
-  302 0334:85 0D        		STA CartIOCount+1
-  303 0336:A5 14        		LDA CartDirectory+ROMDIR_SIZE+LO
-  304 0338:1A           		INC A
-  305 0339:85 0C        		STA CartIOCount
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    6
-                                                        14:11:35  
+  296                   ;		RESTORE_CART		; Unlike cart.src function does not r
+  297 0339:60           		RTS
+  298                   
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    6
+                                                        11:53:52  
 
-  306 033B:A6 12        		LDX CartDirectory+ROMDIR_DEST+LO
-  307 033D:A4 13        		LDY CartDirectory+ROMDIR_DEST+HI
-  308 033F:86 04        		STX sysptr			; Set destination for data read from fi
-  309 0341:84 05        		STY sysptr+1
-  310                   ;		JMP ReadCart0Grunt	; Fall through to reading
-  311                   
-  312                   ; 0343
-  313 0343:             ReadCart0Grunt
-  314 0343:A9 08        		LDA #RESTLESS
-  315 0345:8D 8B FD     		STA IODAT
-  316 0348:A6 09        		LDX CartOffsetLow
-  317 034A:38           		SEC					; Set Y to complement of CartOffsetHigh
-  318 034B:A5 0A        		LDA CartOffsetHi	; to facilitate bounds checking
-  319 034D:E5 06        		SBC CartPageSize
-  320 034F:A8           		TAY
-  321 0350:C6 0C        .42		DEC CartIOCount		; Count down bytes to read
-  322 0352:F0 **        		BEQ .40
-  323 0354:AD B2 FC     .41		LDA RCART_0			; Read and store byte
-  324 0357:92 04        		STA (sysptr)
-  325 0359:E6 04        		INC sysptr
-  326 035B:F0 **        		BEQ .44
-  327 035D:E8           .43		INX					; Bump cart page counters
-  328 035E:D0 F0        		BNE .42
-  329 0360:C8           		INY
-  330 0361:D0 ED        		BNE .42
-  331 0363:E6 0B        		INC CartPage		; Get next page from cartridge
-  332 0365:A5 0B        		LDA CartPage
-  333 0367:20 ** **     		JSR SetCartPage		; Select page number
-  334 036A:A2 00        		LDX #$00			; Set count to read whole page
-  335 036C:38           		SEC
-  336 036D:8A           		TXA
-  337 036E:E5 06        		SBC CartPageSize
-  338 0370:A8           		TAY
-  339 0371:80 DD        		BRA .42
-  340 0373:E6 05        .44		INC sysptr+1		; Not done frequently so pulled out
-  341 0375:80 E6        		BRA .43
-  342 0377:C6 0D        .40		DEC CartIOCount+1	; Check to see if load is finis
-  343 0379:D0 D9        		BNE .41				; If not, get back in there
-  344 037B:86 09        		STX CartOffsetLow	; ROMPAGESIZE is assumed to be mul
-  345 037D:18           		CLC					; Restore true offset value
-  346 037E:98           		TYA
-  347 037F:65 06        		ADC CartPageSize
-  348 0381:85 0A        		STA CartOffsetHi
-  349                   
-  350 0383:A9 0A        		LDA #RESTLESS+CART_ADDR_DATA
-  351 0385:8D 8B FD     		STA IODAT
-  352 0388:60           		RTS
-  353                   
-  354                   ; 0389
-  355 0389:             SetCartPage
-  356 0389:85 00        		STA ztemp1	; Accumulator has block number
-  357 038B:A0 0A        		LDY #RESTLESS+CART_ADDR_DATA
-  358 038D:A9 08        		LDA #RESTLESS
-  359 038F:38           		SEC
-  360 0390:80 **        		BRA .50
-  361 0392:90 **        .52		BCC .51
-  362 0394:8C 8B FD     		STY IODAT
-  363 0397:18           		CLC
-  364 0398:E8           .51		INX				; POWERON+CART_ADDR_STROBE
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    7
-                                                        14:11:35  
+  299                   ; 032E
+  300                   ; Reads file with number specified in A
+  301 033A:             ReadFile
+  302 033A:20 E0 02     		JSR OpenFile		; CartDirectory holds entry number fro
+  303 033D:A5 15        		LDA CartDirectory+ROMDIR_SIZE+HI
+  304 033F:1A           		INC A				; Add one to count down
+  305 0340:85 0D        		STA CartIOCount+1
+  306 0342:A5 14        		LDA CartDirectory+ROMDIR_SIZE+LO
+  307 0344:1A           		INC A
+  308 0345:85 0C        		STA CartIOCount
+  309 0347:A6 12        		LDX CartDirectory+ROMDIR_DEST+LO
+  310 0349:A4 13        		LDY CartDirectory+ROMDIR_DEST+HI
+  311 034B:86 04        		STX sysptr			; Set destination for data read from fi
+  312 034D:84 05        		STY sysptr+1
+  313                   ;		JMP ReadCart0Grunt	; Fall through to reading
+  314                   
+  315                   ; 0343
+  316 034F:             ReadCart0Grunt
+  317 034F:A9 08        		LDA #RESTLESS
+  318 0351:8D 8B FD     		STA IODAT
+  319 0354:A6 09        		LDX CartOffsetLow
+  320 0356:38           		SEC					; Set Y to complement of CartOffsetHigh
+  321 0357:A5 0A        		LDA CartOffsetHi	; to facilitate bounds checking
+  322 0359:E5 06        		SBC CartPageSize
+  323 035B:A8           		TAY
+  324 035C:C6 0C        .42		DEC CartIOCount		; Count down bytes to read
+  325 035E:F0 **        		BEQ .40
+  326 0360:AD B2 FC     .41		LDA RCART_0			; Read and store byte
+  327 0363:92 04        		STA (sysptr)
+  328 0365:E6 04        		INC sysptr
+  329 0367:F0 **        		BEQ .44
+  330 0369:E8           .43		INX					; Bump cart page counters
+  331 036A:D0 F0        		BNE .42
+  332 036C:C8           		INY
+  333 036D:D0 ED        		BNE .42
+  334 036F:E6 0B        		INC CartPage		; Get next page from cartridge
+  335 0371:A5 0B        		LDA CartPage
+  336 0373:20 ** **     		JSR SetCartPage		; Select page number
+  337 0376:A2 00        		LDX #$00			; Set count to read whole page
+  338 0378:38           		SEC
+  339 0379:8A           		TXA
+  340 037A:E5 06        		SBC CartPageSize
+  341 037C:A8           		TAY
+  342 037D:80 DD        		BRA .42
+  343 037F:E6 05        .44		INC sysptr+1		; Not done frequently so pulled out
+  344 0381:80 E6        		BRA .43
+  345 0383:C6 0D        .40		DEC CartIOCount+1	; Check to see if load is finis
+  346 0385:D0 D9        		BNE .41				; If not, get back in there
+  347 0387:86 09        		STX CartOffsetLow	; ROMPAGESIZE is assumed to be mul
+  348 0389:18           		CLC					; Restore true offset value
+  349 038A:98           		TYA
+  350 038B:65 06        		ADC CartPageSize
+  351 038D:85 0A        		STA CartOffsetHi
+  352                   
+  353 038F:A9 0A        		LDA #RESTLESS+CART_ADDR_DATA
+  354 0391:8D 8B FD     		STA IODAT
+  355 0394:60           		RTS
+  356                   
+  357                   ; 0389
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    7
+                                                        11:53:52  
 
-  365 0399:8E 87 FD     		STX SYSCTL1
-  366 039C:A2 02        .50		LDX #POWERON	; Without CART_ADDR_STROBE
-  367 039E:8E 87 FD     		STX SYSCTL1
-  368 03A1:26 00        		ROL ztemp1
-  369 03A3:8D 8B FD     		STA IODAT
-  370 03A6:D0 EA        		BNE .52
-  371 03A8:60           		RTS
-  372                   
-  373                   ; 03A9
-  374                   ; Suzy initialization values
-  375 03A9:             SuzyValues
-  376 03A9:01           		.BYTE SPRITE_GO
-  377 03AA:04           		.BYTE >VIDEO_ORG	; VIDBAS at $0400
-  378 03AB:00           		.BYTE <VIDEO_ORG
-  379 03AC:01           		.BYTE $01			; Enable bus for Suzy
-  380 03AD:28           		.BYTE NO_COLLIDE+LEFTHAND
-  381 03AE:00           		.BYTE $00			; No horizontal and vertical offset
-  382 03AF:00           		.BYTE $00
-  383                   ;		.BYTE $91
-  384                   ;		.BYTE $09
-  385                   
-  386                   ; 03B0
-  387 03B0:             SuzyOffsets
-  388 03B0:91           		.BYTE $91	; SPRGO
-  389 03B1:09           		.BYTE $09	; VIDBASH
-  390 03B2:08           		.BYTE $08	; VIDBASL
-  391 03B3:90           		.BYTE $90	; SUZYBUSEN
-  392 03B4:92           		.BYTE $92	; SPRSYS
-  393 03B5:04           		.BYTE $04	; HOFFL
-  394 03B6:06           		.BYTE $06	; VOFFL
-  395 03B7:28           		.BYTE $28	; HSIZOFFL
-  396 03B8:2A           		.BYTE $2A	; VSIZOFFL
-  397                   
-  398      0009         SUZYVALS_COUNT	.EQ *-SuzyOffsets
-  399                   
-  400                   ; 03B9
-  401                   
-  402                   ; Initialization values for Mikey addresses
-  403 03B9:             MikeyValues
-  404 03B9:00           		.BYTE $00	; Suzy done acknowledge
-  405 03BA:0D           		.BYTE DMA_ENABLE+DISP_FOURBIT+DISP_COLOR ; 4 bit col
-  406 03BB:04           		.BYTE $04	; DISPADDR to $0400
-  407 03BC:00           		.BYTE $00	;
-  408 03BD:FF           		.BYTE $FF	; Rest all interrupt bits
-  409 03BE:00           		.BYTE AUD_1	; Nothing enabled for non-display counte
-  410 03BF:00           		.BYTE AUD_1
-  411 03C0:00           		.BYTE AUD_1
-  412 03C1:00           		.BYTE AUD_1
-  413 03C2:00           		.BYTE AUD_1
-  414 03C3:00           		.BYTE AUD_1
-  415 03C4:29           		.BYTE $29	; Magic P value for screen frequency
-  416 03C5:1F           		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_LINKING
-  417 03C6:68           		.BYTE $68	; 104 backup value for vertical scan timer
-  418 03C7:18           		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_1 ; 2 microseco
-  419 03C8:9E           		.BYTE $9E	; 158 backup value (plus zero and underflo
-  420 03C9:00           		.BYTE AUD_1	; Nothing enabled for all audio counters
-  421 03CA:00           		.BYTE AUD_1	;
-  422 03CB:00           		.BYTE AUD_1	;
-  423 03CC:00           		.BYTE AUD_1	;
-Epyx HandyAsm 1.12      cartgo.src                      05-Aug-12514:11:35 Page    8
-                                                        14:11:35  
+  358 0395:             SetCartPage
+  359 0395:85 00        		STA ztemp1	; Accumulator has block number
+  360 0397:A0 0A        		LDY #RESTLESS+CART_ADDR_DATA
+  361 0399:A9 08        		LDA #RESTLESS
+  362 039B:38           		SEC
+  363 039C:80 **        		BRA .50
+  364 039E:90 **        .52		BCC .51
+  365 03A0:8C 8B FD     		STY IODAT
+  366 03A3:18           		CLC
+  367 03A4:E8           .51		INX				; POWERON+CART_ADDR_STROBE
+  368 03A5:8E 87 FD     		STX SYSCTL1
+  369 03A8:A2 02        .50		LDX #POWERON	; Without CART_ADDR_STROBE
+  370 03AA:8E 87 FD     		STX SYSCTL1
+  371 03AD:26 00        		ROL ztemp1
+  372 03AF:8D 8B FD     		STA IODAT
+  373 03B2:D0 EA        		BNE .52
+  374 03B4:60           		RTS
+  375                   
+  376                   ; 03A9
+  377                   ; Suzy initialization values
+  378 03B5:             SuzyValues
+  379 03B5:01           		.BYTE SPRITE_GO
+  380 03B6:04           		.BYTE >VIDEO_ORG	; VIDBAS at $0400
+  381 03B7:00           		.BYTE <VIDEO_ORG
+  382 03B8:01           		.BYTE $01			; Enable bus for Suzy
+  383 03B9:28           		.BYTE NO_COLLIDE+LEFTHAND
+  384 03BA:00           		.BYTE $00			; No horizontal and vertical offset
+  385 03BB:00           		.BYTE $00
+  386                   ;		.BYTE $91
+  387                   ;		.BYTE $09
+  388                   
+  389                   ; 03B0
+  390 03BC:             SuzyOffsets
+  391 03BC:91           		.BYTE $91	; SPRGO
+  392 03BD:09           		.BYTE $09	; VIDBASH
+  393 03BE:08           		.BYTE $08	; VIDBASL
+  394 03BF:90           		.BYTE $90	; SUZYBUSEN
+  395 03C0:92           		.BYTE $92	; SPRSYS
+  396 03C1:04           		.BYTE $04	; HOFFL
+  397 03C2:06           		.BYTE $06	; VOFFL
+  398 03C3:28           		.BYTE $28	; HSIZOFFL
+  399 03C4:2A           		.BYTE $2A	; VSIZOFFL
+  400                   
+  401      0009         SUZYVALS_COUNT	.EQ *-SuzyOffsets
+  402                   
+  403                   ; 03B9
+  404                   
+  405                   ; Initialization values for Mikey addresses
+  406 03C5:             MikeyValues
+  407 03C5:00           		.BYTE $00	; Suzy done acknowledge
+  408 03C6:0D           		.BYTE DMA_ENABLE+DISP_FOURBIT+DISP_COLOR ; 4 bit col
+  409 03C7:04           		.BYTE $04	; DISPADDR to $0400
+  410 03C8:00           		.BYTE $00	;
+  411 03C9:FF           		.BYTE $FF	; Rest all interrupt bits
+  412 03CA:00           		.BYTE AUD_1	; Nothing enabled for non-display counte
+  413 03CB:00           		.BYTE AUD_1
+  414 03CC:00           		.BYTE AUD_1
+  415 03CD:00           		.BYTE AUD_1
+  416 03CE:00           		.BYTE AUD_1
+Epyx HandyAsm 1.12      cartgo.src                      28-Aug-12511:53:52 Page    8
+                                                        11:53:52  
 
-  424 03CD:0A           		.BYTE CART_ADDR_DATA+RESTLESS ; Set to output
-  425 03CE:0A           		.BYTE CART_ADDR_DATA+RESTLESS
-  426 03CF:04           		.BYTE TXOPEN
-  427                   
-  428      0017         MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values t
-  429                   
-  430                   ; 03D0
-  431                   
-  432 03D0:             MikeyOffsets
-  433                   ; Mikey addresses to be initialized (add to Mikey rang
-  434 03D0:90           		.BYTE <SDONEACK
-  435 03D1:92           		.BYTE <DISPCTL
-  436 03D2:95           		.BYTE <DISPADRH
-  437 03D3:94           		.BYTE <DISPADRL
-  438 03D4:80           		.BYTE <INTRST
-  439 03D5:1D           		.BYTE <TIMER7+TIM_CONTROLA
-  440 03D6:19           		.BYTE <TIMER6+TIM_CONTROLA
-  441 03D7:15           		.BYTE <TIMER5+TIM_CONTROLA
-  442 03D8:11           		.BYTE <TIMER4+TIM_CONTROLA
-  443 03D9:0D           		.BYTE <TIMER3+TIM_CONTROLA
-  444 03DA:05           		.BYTE <TIMER1+TIM_CONTROLA
-  445 03DB:93           		.BYTE <PBKUP
-  446 03DC:09           		.BYTE <TIMER2+TIM_CONTROLA
-  447 03DD:08           		.BYTE <TIMER2+TIM_BACKUP
-  448 03DE:01           		.BYTE <TIMER0+TIM_CONTROLA
-  449 03DF:00           		.BYTE <TIMER0+TIM_BACKUP
-  450 03E0:25           		.BYTE <AUDIO0+AUD_CONTROL
-  451 03E1:2D           		.BYTE <AUDIO1+AUD_CONTROL
-  452 03E2:35           		.BYTE <AUDIO2+AUD_CONTROL
-  453 03E3:3D           		.BYTE <AUDIO3+AUD_CONTROL
-  454 03E4:8A           		.BYTE <IODIR
-  455 03E5:8B           		.BYTE <IODAT
-  456 03E6:8C           		.BYTE <SERCTL
-  457                   
-Epyx HandyAsm 1.12      Symbols                         05-Aug-12514:11:35 Page    9
-                                                        14:11:35  
+  417 03CF:00           		.BYTE AUD_1
+  418 03D0:29           		.BYTE $29	; Magic P value for screen frequency
+  419 03D1:1F           		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_LINKING
+  420 03D2:68           		.BYTE $68	; 104 backup value for vertical scan timer
+  421 03D3:18           		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_1 ; 2 microseco
+  422 03D4:9E           		.BYTE $9E	; 158 backup value (plus zero and underflo
+  423 03D5:00           		.BYTE AUD_1	; Nothing enabled for all audio counters
+  424 03D6:00           		.BYTE AUD_1	;
+  425 03D7:00           		.BYTE AUD_1	;
+  426 03D8:00           		.BYTE AUD_1	;
+  427 03D9:0A           		.BYTE CART_ADDR_DATA+RESTLESS ; Set to output
+  428 03DA:0A           		.BYTE CART_ADDR_DATA+RESTLESS
+  429 03DB:04           		.BYTE TXOPEN
+  430                   
+  431      0017         MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values t
+  432                   
+  433                   ; 03D0
+  434                   
+  435 03DC:             MikeyOffsets
+  436                   ; Mikey addresses to be initialized (add to Mikey rang
+  437 03DC:90           		.BYTE <SDONEACK
+  438 03DD:92           		.BYTE <DISPCTL
+  439 03DE:95           		.BYTE <DISPADRH
+  440 03DF:94           		.BYTE <DISPADRL
+  441 03E0:80           		.BYTE <INTRST
+  442 03E1:1D           		.BYTE <TIMER7+TIM_CONTROLA
+  443 03E2:19           		.BYTE <TIMER6+TIM_CONTROLA
+  444 03E3:15           		.BYTE <TIMER5+TIM_CONTROLA
+  445 03E4:11           		.BYTE <TIMER4+TIM_CONTROLA
+  446 03E5:0D           		.BYTE <TIMER3+TIM_CONTROLA
+  447 03E6:05           		.BYTE <TIMER1+TIM_CONTROLA
+  448 03E7:93           		.BYTE <PBKUP
+  449 03E8:09           		.BYTE <TIMER2+TIM_CONTROLA
+  450 03E9:08           		.BYTE <TIMER2+TIM_BACKUP
+  451 03EA:01           		.BYTE <TIMER0+TIM_CONTROLA
+  452 03EB:00           		.BYTE <TIMER0+TIM_BACKUP
+  453 03EC:25           		.BYTE <AUDIO0+AUD_CONTROL
+  454 03ED:2D           		.BYTE <AUDIO1+AUD_CONTROL
+  455 03EE:35           		.BYTE <AUDIO2+AUD_CONTROL
+  456 03EF:3D           		.BYTE <AUDIO3+AUD_CONTROL
+  457 03F0:8A           		.BYTE <IODIR
+  458 03F1:8B           		.BYTE <IODAT
+  459 03F2:8C           		.BYTE <SERCTL
+  460                   
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:53:52 Page    9
+                                                        11:53:52  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -511,13 +521,13 @@ $FFFC CPU_RESET                         $0007 CartAddr
 $000E CartDirectory                     $000C CartIOCount
 $000A CartOffsetHi                      $0009 CartOffsetLow
 $000B CartPage                          $0006 CartPageSize
-$02C5 CheckFile                         $02B8 CheckFiles
+$02D1 CheckFile                         $02C4 CheckFiles
 $FD95 DISPADRH                          $FD94 DISPADRL
 $FD92 DISPCTL                           $1FE0 DISPLAY_BUFSIZE
 $0008 DISP_COLOR                        $0002 DISP_FLIP
 $0004 DISP_FOURBIT                      $0001 DMA_ENABLE
 $0001 DRAW_LEFT                         $0002 DRAW_UP
-$020F DeterminePageSize                 MACRO ECHO_VALUE
+$021C DeterminePageSize                 MACRO ECHO_VALUE
 $0008 ENABLE_COUNT                      $0080 ENABLE_INT
 $0020 ENABLE_INTEGRATE                  $0010 ENABLE_RELOAD
 $0004 EVER_ON                           $0001 EXTERNAL_POWER
@@ -529,133 +539,134 @@ $FDA4 GREEN4                            $FDA5 GREEN5
 $FDA6 GREEN6                            $FDA7 GREEN7
 $FDA8 GREEN8                            $FDA9 GREEN9
 $FDAA GREENA                            $FDAB GREENB
-Epyx HandyAsm 1.12      Symbols                         05-Aug-12514:11:35 Page   10
-                                                        14:11:35  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:53:52 Page   10
+                                                        11:53:52  
 
 $FDAC GREENC                            $FDAD GREEND
 $FDAE GREENE                            $FDAF GREENF
-$02D9 GetDirAddress                     $FC00 HARDWARE_START
+$02E5 GetDirAddress                     $FC00 HARDWARE_START
 MACRO HBRK                              $FD00 HCOUNT
 $0020 HFLIP                             $0001 HI
 $FC05 HOFFH                             $FC04 HOFFL
-$0001 HORIZONTAL_INT                    $FCC4 HOWIE
-$FC15 HPOSSTRTH                         $FC14 HPOSSTRTL
-$FC29 HSIZOFFH                          $FC28 HSIZOFFL
-MACRO INITINT                           MACRO INITSYS
-$0002 INNER_BUTTON                      $FD80 INTRST
-$FD81 INTSET                            $FD8B IODAT
-$FD8A IODIR                             $FCC3 IOData
-$FCC2 IOStatus                          $024E InitSuzy
-$FCB0 JOYSTICK                          $0080 JOY_DOWN
-$0010 JOY_LEFT                          $0020 JOY_RIGHT
-$0040 JOY_UP                            $0004 LAST_CLOCK
-$FCC0 LEDS                              $0010 LEFT0_SELECT
-$0020 LEFT1_SELECT                      $0040 LEFT2_SELECT
-$0080 LEFT3_SELECT                      $0008 LEFTHAND
-$0008 LEFTHANDED                        $00F0 LEFT_ATTENMASK
-$0080 LITERAL                           $0000 LO
-$0294 LoadVerifyPage                    $FFF9 MAPCTL
-$FC55 MATHA                             $FC54 MATHB
-$FC53 MATHC                             $0020 MATHCARRY
-$FC52 MATHD                             $FC63 MATHE
-$FC62 MATHF                             $FC61 MATHG
-$FC60 MATHH                             $FC6F MATHJ
-$FC6E MATHK                             $FC6D MATHL
-$FC6C MATHM                             $FC57 MATHN
-$FC56 MATHP                             $0040 MATHWARNING
-$0080 MATHWORKING                       $FD88 MIKEYHREV
-$FD89 MIKEYSREV                         $0017 MIKEYVALS_COUNT
-$FD00 MIKEY_BASE                        $0002 MIKEY_SPACE
-$FD44 MPAN                              $FD50 MSTEREO
-$FD9C MTEST0                            $FD9D MTEST1
-$FD9E MTEST2                            $03D0 MikeyOffsets
-$03B9 MikeyValues                       $3000 NMI_ORG
-$0004 NOEXP                             $0005 NONCOLL_SPRITE
-$0004 NORMAL_SPRITE                     $0020 NO_COLLIDE
-$0000 ONE_PER_PIXEL                     $0008 OPTION1_BUTTON
-$0004 OPTION2_BUTTON                    $0001 OUTER_BUTTON
-$0008 OVERRUN                           $02D4 OpenFile
-$0001 PARBIT                            $0010 PAREN
-$0010 PARERR                            $0001 PAREVEN
-$0001 PAUSE_SWITCH                      $FD93 PBKUP
-$0002 POWERON                           $FC2F PROCADRH
-$FC2E PROCADRL                          $FCB2 RCART_0
-$FCB3 RCART_1                           $0010 READ_ENABLE
-$0010 RELOAD_HV                         $0020 RELOAD_HVS
-$0030 RELOAD_HVST                       $0030 RELOAD_MASK
-$0000 RELOAD_NONE                       $0008 RESETERR
-$0040 RESET_DONE                        MACRO RESET_TIMEOUT
-$0008 RESTART_BUTTON                    $0008 RESTLESS
-$0008 REUSE_PALETTE                     $0001 RIGHT0_SELECT
-$0002 RIGHT1_SELECT                     $0004 RIGHT2_SELECT
-$0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
-$0004 ROMDIR_DEST                       $0008 ROMDIR_ENTRY_SIZE
-$0003 ROMDIR_FLAG                       $0001 ROMDIR_OFFSET
-Epyx HandyAsm 1.12      Symbols                         05-Aug-12514:11:35 Page   11
-                                                        14:11:35  
+$0001 HORIZONTAL_INT                    $FFFF HOWARD
+$FCC4 HOWIE                             $FC15 HPOSSTRTH
+$FC14 HPOSSTRTL                         $FC29 HSIZOFFH
+$FC28 HSIZOFFL                          MACRO INITINT
+MACRO INITSYS                           $0002 INNER_BUTTON
+$FD80 INTRST                            $FD81 INTSET
+$FD8B IODAT                             $FD8A IODIR
+$FCC3 IOData                            $FCC2 IOStatus
+$025B InitSuzy                          $FCB0 JOYSTICK
+$0080 JOY_DOWN                          $0010 JOY_LEFT
+$0020 JOY_RIGHT                         $0040 JOY_UP
+$0004 LAST_CLOCK                        $FCC0 LEDS
+$0010 LEFT0_SELECT                      $0020 LEFT1_SELECT
+$0040 LEFT2_SELECT                      $0080 LEFT3_SELECT
+$0008 LEFTHAND                          $0008 LEFTHANDED
+$00F0 LEFT_ATTENMASK                    $0080 LITERAL
+$0000 LO                                $02A0 LoadVerifyPage
+$FFF9 MAPCTL                            $FC55 MATHA
+$FC54 MATHB                             $FC53 MATHC
+$0020 MATHCARRY                         $FC52 MATHD
+$FC63 MATHE                             $FC62 MATHF
+$FC61 MATHG                             $FC60 MATHH
+$FC6F MATHJ                             $FC6E MATHK
+$FC6D MATHL                             $FC6C MATHM
+$FC57 MATHN                             $FC56 MATHP
+$0040 MATHWARNING                       $0080 MATHWORKING
+$FD88 MIKEYHREV                         $FD89 MIKEYSREV
+$0017 MIKEYVALS_COUNT                   $FD00 MIKEY_BASE
+$0002 MIKEY_SPACE                       $FD44 MPAN
+$FD50 MSTEREO                           $FD9C MTEST0
+$FD9D MTEST1                            $FD9E MTEST2
+$03DC MikeyOffsets                      $03C5 MikeyValues
+$3000 NMI_ORG                           $0004 NOEXP
+$0005 NONCOLL_SPRITE                    $0004 NORMAL_SPRITE
+$0020 NO_COLLIDE                        $0000 ONE_PER_PIXEL
+$0008 OPTION1_BUTTON                    $0004 OPTION2_BUTTON
+$0001 OUTER_BUTTON                      $0008 OVERRUN
+$02E0 OpenFile                          $0001 PARBIT
+$0010 PAREN                             $0010 PARERR
+$0001 PAREVEN                           $0001 PAUSE_SWITCH
+$FD93 PBKUP                             $0002 POWERON
+$FC2F PROCADRH                          $FC2E PROCADRL
+$FCB2 RCART_0                           $FCB3 RCART_1
+$0010 READ_ENABLE                       $0010 RELOAD_HV
+$0020 RELOAD_HVS                        $0030 RELOAD_HVST
+$0030 RELOAD_MASK                       $0000 RELOAD_NONE
+$0008 RESETERR                          $0040 RESET_DONE
+MACRO RESET_TIMEOUT                     $0008 RESTART_BUTTON
+$0008 RESTLESS                          $0008 REUSE_PALETTE
+$0001 RIGHT0_SELECT                     $0002 RIGHT1_SELECT
+$0004 RIGHT2_SELECT                     $0008 RIGHT3_SELECT
+$000F RIGHT_ATTENMASK                   $0004 ROMDIR_DEST
+$0008 ROMDIR_ENTRY_SIZE                 $0003 ROMDIR_FLAG
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:53:52 Page   11
+                                                        11:53:52  
 
-$0000 ROMDIR_PAGE                       $0006 ROMDIR_SIZE
-$019A ROM_HEADER_SIZE                   $0004 ROM_SPACE
-$0002 RXBRK                             $0040 RXINTEN
-$0040 RXRDY                             $0343 ReadCart0Grunt
-$032E ReadFile                          $0289 ReadPage
-$0281 ReadPages                         $FC2D SCBADRH
-$FC2C SCBADRL                           $FC11 SCBNEXTH
-$FC10 SCBNEXTL                          $FC23 SCVPOSH
-$FC22 SCVPOSL                           $FD90 SDONEACK
-$FD8C SERCTL                            $FD8D SERDAT
-$FD10 SERIALRATE                        $0010 SERIAL_INT
-MACRO SET_BRK                           $0007 SHADOW_SPRITE
-$0080 SIGNMATH                          $0004 SKIP_SPRITE
-$FC82 SPRCOLL                           $FC80 SPRCTL0
-$FC81 SPRCTL1                           $FC13 SPRDLINEH
-$FC12 SPRDLINEL                         $FC21 SPRDOFFH
-$FC20 SPRDOFFL                          $FC91 SPRGO
-$FC19 SPRHSIZH                          $FC18 SPRHSIZL
-$FC83 SPRINIT                           $0002 SPRITESTOP
-$0002 SPRITETOSTOP                      $0001 SPRITEWORKING
-$0001 SPRITE_GO                         $FC92 SPRSYS
-$FC1B SPRVSIZH                          $FC1A SPRVSIZL
-$FC1D STRETCHH                          $FC1C STRETCHL
-$FC90 SUZYBUSEN                         $FC88 SUZYHREV
-$FC89 SUZYSREV                          $0009 SUZYVALS_COUNT
-$FC00 SUZY_BASE                         $0001 SUZY_SPACE
-$FCB1 SWITCHES                          $FD87 SYSCTL1
-$0313 SetCartAddress                    $031C SetCartOffset
-$0389 SetCartPage                       $03B0 SuzyOffsets
-$03A9 SuzyValues                        $0080 THREE_PER_PIXEL
-$FC03 TILTACUMH                         $FC02 TILTACUML
-$FC1F TILTH                             $FC1E TILTL
-$FD00 TIMER0                            $0001 TIMER0_INT
-$FD04 TIMER1                            $0002 TIMER1_INT
-$FD08 TIMER2                            $0004 TIMER2_INT
-$FD0C TIMER3                            $0008 TIMER3_INT
-$FD10 TIMER4                            $FD14 TIMER5
-$0020 TIMER5_INT                        $FD18 TIMER6
-$0040 TIMER6_INT                        $FD1C TIMER7
-$0080 TIMER7_INT                        $0008 TIMER_DONE
-$0000 TIM_BACKUP                        $0001 TIM_CONTROLA
-$0003 TIM_CONTROLB                      $0002 TIM_COUNT
-$FC01 TMPADRH                           $FC00 TMPADRL
-$0080 TURBO_DISABLE                     $0040 TWO_PER_PIXEL
-$0002 TXBRK                             $0020 TXEMPTY
-$0080 TXINTEN                           $0004 TXOPEN
-$0080 TXRDY                             $0004 UNSAFEACCESS
-$0004 UNSAFEACCESSRST                   $FD08 VCOUNT
-$0008 VECTOR_SPACE                      $0004 VERTICAL_INT
-$0010 VFLIP                             $FC0D VIDADRH
-$FC0C VIDADRL                           $FC09 VIDBASH
-$FC08 VIDBASL                           $0400 VIDEO_ORG
-$FC07 VOFFH                             $FC06 VOFFL
-$FC17 VPOSSTRTH                         $FC16 VPOSSTRTL
-$FC27 VSIZACUMH                         $FC26 VSIZACUML
-$FC2B VSIZOFFH                          $FC2A VSIZOFFL
-$0010 VSTRETCH                          $0010 VSTRETCHING
-$0006 XOR_SHADOW_SPRITE                 $0006 XOR_SPRITE
-$02B5 abort                             $02AA branch
-Epyx HandyAsm 1.12      Symbols                         05-Aug-12514:11:35 Page   12
-                                                        14:11:35  
+$0001 ROMDIR_OFFSET                     $0000 ROMDIR_PAGE
+$0006 ROMDIR_SIZE                       $019A ROM_HEADER_SIZE
+$0004 ROM_SPACE                         $0002 RXBRK
+$0040 RXINTEN                           $0040 RXRDY
+$034F ReadCart0Grunt                    $033A ReadFile
+$0295 ReadPage                          $028D ReadPages
+$FC2D SCBADRH                           $FC2C SCBADRL
+$FC11 SCBNEXTH                          $FC10 SCBNEXTL
+$FC23 SCVPOSH                           $FC22 SCVPOSL
+$FD90 SDONEACK                          $FD8C SERCTL
+$FD8D SERDAT                            $FD10 SERIALRATE
+$0010 SERIAL_INT                        MACRO SET_BRK
+$0007 SHADOW_SPRITE                     $0080 SIGNMATH
+$0004 SKIP_SPRITE                       $FC82 SPRCOLL
+$FC80 SPRCTL0                           $FC81 SPRCTL1
+$FC13 SPRDLINEH                         $FC12 SPRDLINEL
+$FC21 SPRDOFFH                          $FC20 SPRDOFFL
+$FC91 SPRGO                             $FC19 SPRHSIZH
+$FC18 SPRHSIZL                          $FC83 SPRINIT
+$0002 SPRITESTOP                        $0002 SPRITETOSTOP
+$0001 SPRITEWORKING                     $0001 SPRITE_GO
+$FC92 SPRSYS                            $FC1B SPRVSIZH
+$FC1A SPRVSIZL                          $FC1D STRETCHH
+$FC1C STRETCHL                          $FC90 SUZYBUSEN
+$FC88 SUZYHREV                          $FC89 SUZYSREV
+$0009 SUZYVALS_COUNT                    $FC00 SUZY_BASE
+$0001 SUZY_SPACE                        $FCB1 SWITCHES
+$FD87 SYSCTL1                           $031F SetCartAddress
+$0328 SetCartOffset                     $0395 SetCartPage
+$03BC SuzyOffsets                       $03B5 SuzyValues
+$0080 THREE_PER_PIXEL                   $FC03 TILTACUMH
+$FC02 TILTACUML                         $FC1F TILTH
+$FC1E TILTL                             $FD00 TIMER0
+$0001 TIMER0_INT                        $FD04 TIMER1
+$0002 TIMER1_INT                        $FD08 TIMER2
+$0004 TIMER2_INT                        $FD0C TIMER3
+$0008 TIMER3_INT                        $FD10 TIMER4
+$FD14 TIMER5                            $0020 TIMER5_INT
+$FD18 TIMER6                            $0040 TIMER6_INT
+$FD1C TIMER7                            $0080 TIMER7_INT
+$0008 TIMER_DONE                        $0000 TIM_BACKUP
+$0001 TIM_CONTROLA                      $0003 TIM_CONTROLB
+$0002 TIM_COUNT                         $FC01 TMPADRH
+$FC00 TMPADRL                           $0080 TURBO_DISABLE
+$0040 TWO_PER_PIXEL                     $0002 TXBRK
+$0020 TXEMPTY                           $0080 TXINTEN
+$0004 TXOPEN                            $0080 TXRDY
+$0004 UNSAFEACCESS                      $0004 UNSAFEACCESSRST
+$FD08 VCOUNT                            $0008 VECTOR_SPACE
+$0004 VERTICAL_INT                      $0010 VFLIP
+$FC0D VIDADRH                           $FC0C VIDADRL
+$FC09 VIDBASH                           $FC08 VIDBASL
+$0400 VIDEO_ORG                         $FC07 VOFFH
+$FC06 VOFFL                             $FC17 VPOSSTRTH
+$FC16 VPOSSTRTL                         $FC27 VSIZACUMH
+$FC26 VSIZACUML                         $FC2B VSIZOFFH
+$FC2A VSIZOFFL                          $0010 VSTRETCH
+$0010 VSTRETCHING                       $0006 XOR_SHADOW_SPRITE
+$0006 XOR_SPRITE                        $02C1 abort
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:53:52 Page   12
+                                                        11:53:52  
 
-$02D3 check_failed                      $0002 dataptr
-$0004 sysptr                            $02B6 verify_error
-$0000 ztemp1                            $0001 ztemp2
+$02B6 branch                            $02DF check_failed
+$0002 dataptr                           $0004 sysptr
+$02C2 verify_error                      $0000 ztemp1
+$0001 ztemp2                            

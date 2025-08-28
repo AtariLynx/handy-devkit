@@ -1,5 +1,5 @@
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    1
-                                                        04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    1
+                                                        11:51:04  
 
     1                   * ====================================================
     2                   
@@ -59,8 +59,8 @@
     4                 + 	  #ENDIF
     5 0006:           + 	  .ORG TEMPORG
     6                 + 
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    2
-                        6502:src/syszpage.src           04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    2
+                        6502:src/syszpage.src           11:51:04  
 
    39                   
    40                   
@@ -121,8 +121,8 @@
    43 202C:8D 8B FD     		STA IODAT
    44 202F:8D ** **     		STA IODAT_RAM
    45 2032:8D 8A FD     		STA IODIR
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    3
-                                                        04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    3
+                                                        11:51:04  
 
    46 2035:8D ** **     		STA IODIR_RAM
    47                   
@@ -168,7 +168,7 @@
    87 207E:A9 10        		LDA #$10		; Loop through 16 pages again
    88 2080:85 0A        		STA PageCount
    89 2082:A5 06        .2		LDA CartPage
-   90 2084:20 ** **     		JSR SetCartBlock2
+   90 2084:20 ** **     		JSR SetCartPage
    91 2087:A9 08        		LDA #RESTLESS
    92 2089:8D 8B FD     		STA IODAT
    93 208C:A6 09        		LDX Unknown2
@@ -183,8 +183,8 @@
   102 209D:D0 F1        		BNE .1
   103 209F:E6 06        		INC CartPage
   104 20A1:A5 0A        		LDA PageCount
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    4
-                                                        04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    4
+                                                        11:51:04  
 
   105 20A3:D0 DD        		BNE .2
   106 20A5:A9 1A        		LDA #READ_ENABLE+RESTLESS+CART_ADDR_DATA
@@ -230,23 +230,23 @@
   146 20E1:29 40        		AND #$40		; Check for bit 6
   147 20E3:D0 F9        		BNE .1			; Wait
   148                   ; Switch to TX mode
-  149 20E5:20 ** **     		JSR Write0Page6	; Zero to page 6
-  150 20E8:20 ** **     		JSR Write0Page7	; Zero to page 7
+  149 20E5:20 ** **     		JSR Write0Page6	; Zero to page 6	set mode to input
+  150 20E8:20 ** **     		JSR Write0Page7	; Zero to page 7	io bit on
   151                   ; Wait for Amiga in RX mode
   152 20EB:20 ** **     .2		JSR ReadPage8	; Read status byte from page 8 
   153 20EE:29 40        		AND #$40
   154 20F0:F0 F9        		BEQ .2			; Wait for strobe bit 6 again
   155                   ; Switch to RX mode
-  156 20F2:20 ** **     		JSR Write0Page6	; Zero to page 6
-  157 20F5:20 ** **     		JSR Write0Page3	; Zero to page 3
+  156 20F2:20 ** **     		JSR Write0Page6	; Zero to page 6	set mode to input
+  157 20F5:20 ** **     		JSR Write0Page3	; Zero to page 3	io bit off
   158 20F8:68           		PLA
   159 20F9:60           		RTS
   160                   
   161 20FA:             Write0Page6	; Set 0110
   162 20FA:A9 06        		LDA #$06		; Select page 6 
   163 20FC:80 **        		BRA WriteCart1
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    5
-                                                        04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    5
+                                                        11:51:04  
 
   164 20FE:             Write0Page2	; Set 0010
   165 20FE:A9 02        		LDA #$02		; Select page 2
@@ -307,8 +307,8 @@
   220 2153:8A           		TXA
   221 2154:38           		SEC
   222 2155:2A           		ROL A
-Epyx HandyAsm 1.12      cartload.src                    13-Aug-12504:29:09 Page    6
-                                                        04:29:09  
+Epyx HandyAsm 1.12      cartload.src                    28-Aug-12511:51:04 Page    6
+                                                        11:51:04  
 
   223 2156:90 **        .2		BCC .0
   224 2158:AE ** **     		LDX .fd
@@ -331,7 +331,7 @@
   241 2179:             .fd		.DS 1
   242 217A:             .fe		.DS 1
   243                   
-  244 217B:             SetCartBlock2
+  244 217B:             SetCartPage
   245 217B:8D ** **     		STA .ff
   246 217E:A0 1A        		LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
   247 2180:A9 18        		LDA #READ_ENABLE+RESTLESS
@@ -356,8 +356,8 @@
   266 21A0:             IODAT_RAM		.DS 1 ; 21A0
   267 21A1:             IODIR_RAM		.DS 1 ; 21A1
   268                   
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:29:09 Page    7
-                                                        04:29:09  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:51:04 Page    7
+                                                        11:51:04  
 
 $0040 ACCUMULATE                        $0040 ALGO_3
 $0000 ASM.EQUSYMS                       $010C ASM.VERSION
@@ -417,8 +417,8 @@ $FDA3 GREEN3                            $FDA4 GREEN4
 $FDA5 GREEN5                            $FDA6 GREEN6
 $FDA7 GREEN7                            $FDA8 GREEN8
 $FDA9 GREEN9                            $FDAA GREENA
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:29:09 Page    8
-                                                        04:29:09  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:51:04 Page    8
+                                                        11:51:04  
 
 $FDAB GREENB                            $FDAC GREENC
 $FDAD GREEND                            $FDAE GREENE
@@ -479,8 +479,8 @@ $0008 RIGHT3_SELECT                     $000F RIGHT_ATTENMASK
 $0004 ROM_SPACE                         $0002 RXBRK
 $0040 RXINTEN                           $0040 RXRDY
 $2115 ReadCart1                         $210F ReadPage8
-Epyx HandyAsm 1.12      Symbols                         13-Aug-12504:29:09 Page    9
-                                                        04:29:09  
+Epyx HandyAsm 1.12      Symbols                         28-Aug-12511:51:04 Page    9
+                                                        11:51:04  
 
 $2113 ReadPage9                         $20B3 ReceiveByte
 $FC2D SCBADRH                           $FC2C SCBADRL
@@ -505,7 +505,7 @@ $FC90 SUZYBUSEN                         $FC88 SUZYHREV
 $FC89 SUZYSREV                          $FC00 SUZY_BASE
 $0001 SUZY_SPACE                        $FCB1 SWITCHES
 $FD87 SYSCTL1                           $211C SendByte
-$2127 SetCartBlock1                     $217B SetCartBlock2
+$2127 SetCartBlock1                     $217B SetCartPage
 $FFFE TEMPORG                           $0080 THREE_PER_PIXEL
 $FC03 TILTACUMH                         $FC02 TILTACUML
 $FC1F TILTH                             $FC1E TILTL

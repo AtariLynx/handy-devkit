@@ -87,7 +87,7 @@ CartSize		.DS 3	; $0B-$0C-$0D
 		LDA #$10		; Loop through 16 pages again
 		STA PageCount
 .2		LDA CartPage
-		JSR SetCartBlock2
+		JSR SetCartPage
 		LDA #RESTLESS
 		STA IODAT
 		LDX Unknown2
@@ -146,15 +146,15 @@ NotifyHandyReset ; (Preserves A) init link
 		AND #$40		; Check for bit 6
 		BNE .1			; Wait
 ; Switch to TX mode
-		JSR Write0Page6	; Zero to page 6
-		JSR Write0Page7	; Zero to page 7
+		JSR Write0Page6	; Zero to page 6	set mode to input
+		JSR Write0Page7	; Zero to page 7	io bit on
 ; Wait for Amiga in RX mode
 .2		JSR ReadPage8	; Read status byte from page 8 
 		AND #$40
 		BEQ .2			; Wait for strobe bit 6 again
 ; Switch to RX mode
-		JSR Write0Page6	; Zero to page 6
-		JSR Write0Page3	; Zero to page 3
+		JSR Write0Page6	; Zero to page 6	set mode to input
+		JSR Write0Page3	; Zero to page 3	io bit off
 		PLA
 		RTS
 
@@ -241,7 +241,7 @@ SetCartBlock1	; Set cart control
 .fd		.DS 1
 .fe		.DS 1
 
-SetCartBlock2
+SetCartPage
 		STA .ff
 		LDY #READ_ENABLE+RESTLESS+CART_ADDR_DATA
 		LDA #READ_ENABLE+RESTLESS
