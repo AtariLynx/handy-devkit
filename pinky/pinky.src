@@ -30,18 +30,18 @@ runptr			.DS 2
 		.ORG BASE_ORG
 		.RUN *
 
-		LDX #LOAD_COUNT		; $66 bytes
-.0		LDA NmiHandler-1,X	; Copy from $021C to $3000
+		LDX #LOAD_COUNT			; $66 bytes
+.0		LDA NmiHandler-1,X		; Copy from $021C to $3000
 		STA NMI_ORG-1,X
 		DEX
 		BNE .0
 		LDA #VECTOR_SPACE
-		STA MAPCTL			; Vectors to RAM
+		STA MAPCTL				; Vectors to RAM
 		LDA #<NMI_ORG
-		STA CPU_NMI+LO		; Set NMI to point to code
+		STA CPU_NMI+LO			; Set NMI to point to code
 		LDA #>NMI_ORG
 		STA CPU_NMI+HI
-.1		BRA .1				; Wait for NMI
+.1		BRA .1					; Wait for NMI
 
 OFFSET  .EQ NMI_ORG-*
 
@@ -51,25 +51,25 @@ NmiHandler
 		INC A
 		STA IODIR
 		LDA #06
-		JSR OFFSET+SetPage	; Select cartridge page 6
-		STZ RCART_1			; Write acknowledge
+		JSR OFFSET+SetPage		; Select cartridge page 6
+		STZ RCART_1				; Write acknowledge
 		JSR OFFSET+ReceiveWord	; Get address
-		STX loadptr+LO		; Set as both load and run address
+		STX loadptr+LO			; Set as both load and run address
 		STX runptr+LO
 		STA loadptr+HI
 		STA runptr+HI
 		JSR OFFSET+ReceiveWord	; Get length
-		TAY					; Y is MSB, X is LSB (2's complement)
+		TAY						; Y is MSB, X is LSB (2's complement)
 .1		JSR OFFSET+ReceiveByte	; Read program byte 
-		STA (loadptr)		; Store at current load address
-		INC loadptr+LO		; Next address
+		STA (loadptr)			; Store at current load address
+		INC loadptr+LO			; Next address
 		BNE .0
 		INC loadptr+HI
-.0		INX					; Adjust counters
+.0		INX						; Adjust counters
 		BNE .1
 		INY
 		BNE .1
-		JMP (runptr)		; Run program at run address
+		JMP (runptr)			; Run program at run address
 
 ReceiveWord ; $3034
 		JSR OFFSET+ReceiveByte
@@ -77,12 +77,12 @@ ReceiveWord ; $3034
 
 ReceiveByte ; 3038 Get a byte from parallel port
 		LDA #08
-		JSR OFFSET+SetPage	; Select cartridge page 8
-.0		LDA RCART_1			; Read strobe from port
-		BPL .0				; Wait for strobe
+		JSR OFFSET+SetPage		; Select cartridge page 8
+.0		LDA RCART_1				; Read strobe from port
+		BPL .0					; Wait for strobe
 		LDA #09
-		JSR OFFSET+SetPage	; Select cartridge page 9
-		LDA RCART_1			; Read data byte
+		JSR OFFSET+SetPage		; Select cartridge page 9
+		LDA RCART_1				; Read data byte
 		RTS
 
 SetPage ; 304B Set cart page routine (preserves X)
@@ -90,14 +90,14 @@ SetPage ; 304B Set cart page routine (preserves X)
 		SEC
 		BRA .0
 .2		BCC .1
-		STX IODAT			; Cart address data X = %10
+		STX IODAT				; Cart address data X = %10
 		CLC
 .1		INX
-		STX SYSCTL1			; Strobe shifter    X = %11
+		STX SYSCTL1				; Strobe shifter    X = %11
 .0		LDX #POWERON
-		STX SYSCTL1			; Strobe shifter    X = %10
+		STX SYSCTL1				; Strobe shifter    X = %10
 		ROL A
-		STZ IODAT			; Cart address data   = %00
+		STZ IODAT				; Cart address data   = %00
 		BNE .2
 		PLX
 		RTS

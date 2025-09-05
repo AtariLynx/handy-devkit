@@ -252,8 +252,8 @@ Upload
 		STA sysptr+1
 		LDY #REGISTER_BYTECOUNT
 		JSR BeginUpload
-		LDA #$10
-		JSR SendByte		; Write $10 to page 1 (Echo?)
+		LDA #REGISTER
+		JSR SendByte		; Write $10 to page 1
 		JSR SendRange		; Write Y values from ($F8) to page 1
 		JSR EndUpload
 		JMP UploadNext
