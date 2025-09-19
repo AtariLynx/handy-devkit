@@ -11,7 +11,11 @@
 SIZEKEY			.EQ 51
 
 BASE_ORG		.EQ $0200
+NMI_ORG			.EQ $3000
 WORK_ORG		.EQ $5000
+RUN_ORG			.EQ $FF80
+VID_ORG			.EQ $2000
+ROM_ORG			.EQ $FE00
 
 SETCARTBLOCK	.EQ $FE00
 RSA_LOAD		.EQ $FE4A
@@ -32,25 +36,21 @@ DISP			.EQ $FEC1-WORK_ORG
 * These are the variables as declared by the Mikey ROM code
 
 * Note!  dest is presumed to be at memory location zero
-dest		.DS	2
-
-checksum	.ds 1		; checksum used during decryption
-
+dest			.DS	2
+checksum		.DS 1		; checksum used during decryption
 powerdowncount	.DS 2
-
-ptr		.ds 2
-num_blocks	.ds 1
-
-bitcount	.DS 1		; temporary counter
-bytecount	.DS 1		; temporary counter
-temp0		.DS 1
-acc0		.DS 2		; accumulator pointers
-acc1		.DS 2
-input1		.DS 2		; pointer to multiplicand
-scratch0	.DS SIZEKEY	; scratch areas must be in zero page
-scratch1	.DS SIZEKEY
-scratch2	.DS SIZEKEY
-inputcode	.DS SIZEKEY
+ptr				.DS 2
+num_blocks		.DS 1
+bitcount		.DS 1		; temporary counter
+bytecount		.DS 1		; temporary counter
+temp0			.DS 1
+acc0			.DS 2		; accumulator pointers
+acc1			.DS 2
+input1			.DS 2		; pointer to multiplicand
+scratch0		.DS SIZEKEY	; scratch areas must be in zero page
+scratch1		.DS SIZEKEY
+scratch2		.DS SIZEKEY
+inputcode		.DS SIZEKEY
 encrypted_area	.EQ inputcode
 
 * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -64,32 +64,31 @@ encrypted_area	.EQ inputcode
 		.ECHO "Value of ?0 is ?%d0 ($?%x0)"
 	#ENDMACRO
 
-
 * ===========================================================================
 * ===========================================================================
 
-		.OR $fe00
+		.OR ROM_ORG
 		.RU *
 
 SetCartBlock
 		; Fill shift register for cartridge (in A)
-		SEC				; Marker bit to detect end of shifting
+		SEC					; Marker bit to detect end of shifting
 		BRA .0
 .1		BCC .2
-		STX IODAT		; When C set, set bit for shifting to 1 
+		STX IODAT			; When C set, set bit for shifting to 1 
 		CLC
-.2		INX 			; 0th bit now 1 to strobe
+.2		INX 				; 0th bit now 1 to strobe
 		STX SYSCTL1
-.0		LDX #POWERON	; Zero for 0th bit is relevant for SYSCTL strobe
-		STX SYSCTL1		; Power on 
+.0		LDX #POWERON		; Zero for 0th bit is relevant for SYSCTL strobe
+		STX SYSCTL1			; Power on 
 		ROL A
-		STZ IODAT		; Zero for bit to shift into register
+		STZ IODAT			; Zero for bit to shift into register
 		BNE .1
-		RTS				; Back to decryption routine
+		RTS					; Back to decryption routine
 
-		; Clear all memory from $0003 to $FFFF to 0x00
+		; Clear all memory from $0003 to $FFFF to #$00
 ClearMemory
-		STZ dest+1				
+		STZ dest+1
 		LDA #$00
 .3		STA (dest),y
 		INY
@@ -99,7 +98,7 @@ ClearMemory
 
 		; Routine to initialize Mikey
 InitMikey
-		LDX #MIKEYVALS_COUNT			
+		LDX #MIKEYVALS_COUNT
 .4		LDA MikeyValues-1,x
 		LDY MikeyOffsets-1,x
 		STA MIKEY_BASE,y
@@ -113,59 +112,59 @@ copy	LDA Decrypt,x
 		BNE copy
 
 ; Start decryption process for first frame
-		STZ ptr			; Destination address of decrypted data (low)
-		LDA #2
-		STA ptr+1		; Destination address of decrypted data (high)
-		STZ checksum	; Initialize transition byte
-		LDA #0			; Prepare for first block
+		STZ ptr				; Destination address of decrypted data (low)
+		LDA #2				; $0200
+		STA ptr+1			; Destination address of decrypted data (high)
+		STZ checksum		; Initialize transition byte
+		LDA #0				; Prepare for first block
 		JSR SetCartBlock
 
-		LDA RCART_0		; Read cart (using strobe CART0)
-		CMP #$FB		; First byte has two's complement of number of blocks in first frame 
-		BCC retry		; If value is less than #$FB it is not a correct header
-		STA num_blocks	; Save block count
-		STZ GREENF		; GREENF = 0
-		STZ BLUEREDF	; BLUEREDF = 0
+		LDA RCART_0			; Read cart (using strobe CART0)
+		CMP #$FB			; First byte has two's complement of number of blocks in first frame 
+		BCC retry			; If value is less than #$FB it is not a correct header
+		STA num_blocks		; Save block count
+		STZ GREENF			; GREENF = 0
+		STZ BLUEREDF		; BLUEREDF = 0
 
 ; Read entire block of encrypted data (reversed)
 ReadBlock
-		LDX #SIZEKEY-1	; Each block in a frame is 50 + 1 byte long
-.5		LDA RCART_0		; Read cart (using strobe CART0)
-		STA inputcode,x	; Store block data in ZP from $AA to $DC
+		LDX #SIZEKEY-1		; Each block in a frame is 50 + 1 byte long
+.5		LDA RCART_0			; Read cart (using strobe CART0)
+		STA inputcode,x		; Store block data in ZP from $AA to $DC
 		DEX
-		BPL .5		; Next byte
+		BPL .5				; Next byte
 
 ; Decrypt current block
-		ORA inputcode+1	; Accumulator contains last byte of encrypted data
+		ORA inputcode+1		; Accumulator contains last byte of encrypted data
 		ORA inputcode+2
-		BEQ retry		; First three bytes should contain at least one non-zero value, otherwise error
-		LDX #$02		; Start at position 2
-.8		LDA inputcode,x	; Read value
-		SBC modulus,x	; Subtract with public part of encryption key
+		BEQ retry			; First three bytes should contain at least one non-zero value, otherwise error
+		LDX #$02			; Start at position 2
+.8		LDA inputcode,x		; Read value
+		SBC modulus,x		; Subtract with public part of encryption key
 		DEX
-		BPL .8			; Next value
-		BCS retry		; If sanity check fails go to error
-		JSR WORK_ORG	; Start decryption (plaintext = encrypted ^ public_exponent % modulus)
-		LDA (acc0)		; Sanity check for contents of decrypted (and still obfuscated) data's first byte
-		CMP #$15		; Must always be $15 as hardcoded marker byte of start of obfuscated block
-		BNE retry		; On error
+		BPL .8				; Next value
+		BCS retry			; If sanity check fails go to error
+		JSR WORK_ORG		; Start decryption (plaintext = encrypted ^ public_exponent % modulus)
+		LDA (acc0)			; Sanity check for contents of decrypted (and still obfuscated) data's first byte
+		CMP #$15			; Must always be $15 as hardcoded marker byte of start of obfuscated block
+		BNE retry			; On error
 
-		LDA checksum	; Get transition byte between blocks
-		LDY #SIZEKEY-1	; Start at end of decrypted data
+		LDA checksum		; Get transition byte between blocks
+		LDY #SIZEKEY-1		; Start at end of decrypted data
 .9		CLC
-		ADC (acc0),y	; A += decrypted data
-		STA (ptr)		; Store at destination address ($0200) and onwards
-		INC ptr			; Update destination
-		DEY				; Next byte
-		BNE .9			; Until all data in block is done
-		STA checksum	; Remember last byte
-		INC num_blocks	; Next block
-		BNE ReadBlock	; Continue reading next block of data from cart
+		ADC (acc0),y		; A += decrypted data
+		STA (ptr)			; Store at destination address ($0200) and onwards
+		INC ptr				; Update destination
+		DEY					; Next byte
+		BNE .9				; Until all data in block is done
+		STA checksum		; Remember last byte
+		INC num_blocks		; Next block
+		BNE ReadBlock		; Continue reading next block of data from cart
 		LDY #CART_POWER_OFF
-		STY IODAT		; Set cart address data
+		STY IODAT			; Set cart address data
 		TAX
-		BNE retry		; On error retry
-		JMP BASE_ORG	; Run whatever is at $0200
+		BNE retry			; On error retry
+		JMP BASE_ORG		; Run whatever is at $0200
 
 ; Retry lots of times
 retry
@@ -173,8 +172,8 @@ retry
 		BNE InitSuzy
 		INC powerdowncount+1
 		BNE InitSuzy
-		STZ SYSCTL1		; Power down console
-.6		BRA .6			; Give up and loop forever 
+		STZ SYSCTL1			; Power down console
+.6		BRA .6				; Give up and loop forever 
 
 ; Initialize Suzy
 InitSuzy
@@ -184,24 +183,24 @@ InitSuzy
 		STA SUZY_BASE,y
 		DEX
 		BPL .7
-		STZ CPUSLEEP	; Reset CPU bus request flip flop (draw INSERT GAME sprite)
-		STZ SDONEACK	; Clear SDONEACK
-		JMP InitMikey	; Call routine to initialize Mikey
+		STZ CPUSLEEP		; Reset CPU bus request flip flop (draw INSERT GAME sprite)
+		STZ SDONEACK		; Clear SDONEACK
+		JMP InitMikey		; Call routine to initialize Mikey
 
 OFFSET	.EQ WORK_ORG-*
 
 Decrypt
 		LDA #<scratch0
-		STA acc0		; Pointer to start of zero page temporary data
-		LDA #<scratch1	; End of working data zero page address
-		STA $5071		; Self-modifying code (see FF32)
+		STA acc0			; Pointer to start of zero page temporary data
+		LDA #<scratch1		; End of working data zero page address
+		STA $5071			; Self-modifying code (see $FF32)
 		LDA #<inputcode
-		STA input1		; Pointer to start of encrypted data in zero page range
-		JSR $5018		; Currently FED9: perform first multiplication of enc * enc * enc (encrypted^3)
-		LDA acc0		; Transfer pointer to data with enc^2 ...
-		STA input1		; ... to encryption data
-		LDA #<scratch2	; Set pointer for work data right after squared encryption data
-		STA acc0		; Perform second multiplication of enc * enc * enc (encrypted^3)
+		STA input1			; Pointer to start of encrypted data in zero page range
+		JSR $5018			; Currently FED9: perform first multiplication of enc * enc * enc (encrypted^3)
+		LDA acc0			; Transfer pointer to data with enc^2 ...
+		STA input1			; ... to encryption data
+		LDA #<scratch2		; Set pointer for work data right after squared encryption data
+		STA acc0			; Perform second multiplication of enc * enc * enc (encrypted^3)
 
 ; Clear all 51 values of temporary work data
 		LDY #SIZEKEY-1		
@@ -211,69 +210,69 @@ Decrypt
 		BPL .10
 
 ; Montgomery multiplication algorithm
-		INY				; Y = 0
-.19		LDA (input1),y	; Load value from encrypted data (or enc^2 on second pass)
-		STA temp0		; Store in work variable
+		INY					; Y = 0
+.19		LDA (input1),y		; Load value from encrypted data (or enc^2 on second pass)
+		STA temp0			; Store in work variable
 		DEC bitcount
-.20		LDA acc0		; Change data address to work on
-		STA $5037		; Self-modifying code (see FEF7)
-		STA $5043		; Self-modifying code (see FF04)
-		STA $5047		; Self-modifying code (see FF08)
+.20		LDA acc0			; Change data address to work on
+		STA $5037			; Self-modifying code (see FEF7)
+		STA $5043			; Self-modifying code (see FF04)
+		STA $5047			; Self-modifying code (see FF08)
 		CLC
 		LDX #SIZEKEY-1
-.23		ROL $00,x		; Operand corresponds to $5037
+.23		ROL dest,x			; Operand corresponds to $5037
 		DEX
 		BPL .23
-		ASL $0A
+		ASL temp0
 		BCC .24
-		LDX #$32
+		LDX #SIZEKEY-1
 		CLC
-.21		LDA dest,x		; Operand corresponds to $5043
+.21		LDA dest,x			; Operand corresponds to $5043
 		ADC inputcode,x
-		STA dest,x		; Operand corresponds to $5047
+		STA dest,x			; Operand corresponds to $5047
 		DEX
 		BPL .21
  		JSR OFFSET+MontgomeryReduce
 		BCC .22
 .24		JSR OFFSET+MontgomeryReduce
-.22		LSR $08
+.22		LSR bitcount
 		BNE .20
 		INY
 		CPY #SIZEKEY
 		BCC .19
-		RTS				; scratch0 + scratch1 contains enc^2 at first pass
+		RTS					; scratch0 + scratch1 contains enc^2 at first pass
 
 MontgomeryReduce
 		LDA acc0
 		STA $506C
 		LDA (acc0)
-		CMP modulus		; Start of public part of encryption key
+		CMP modulus			; Start of public part of encryption key
 		BCC done
 		LDX #SIZEKEY-1
 .30		LDA dest,x
-		SBC modulus,x	; Subtract from corresponding byte in public key
-		STA dest,x		; Operand corresponds to $5071 when copied
+		SBC modulus,x		; Subtract from corresponding byte in public key
+		STA dest,x			; Operand corresponds to $5071 when copied
 		DEX
 		BPL .30
 		BCC done
 		LDA acc0
 		LDX $5071
-		STX acc0		; Update pointer to work data
-		STA $5071		; Self-modify code
+		STX acc0			; Update pointer to work data
+		STA $5071			; Self-modify code
 done
 		RTS
 
 		; SCB data for INSERT GAME sprite
-		.BYTE $05		; SPRCTLO (1 bit/pixel, no flipping, non-collideable sprite)
-		.BYTE $93		; SPRCTL1 (Totally literal, HSIZE and VSIZE specified, drawing starts at upper left quadrant)
-		.BYTE $00		; SPRCOLL
-		.WORD $0000		; Address of next SCB
-		.WORD $5092		; Address of SPRDLINE (sprite data)
-		.WORD $0080		; HPOSSTRT 128
-		.WORD $0048		; VPOSSTRT 72
-		.WORD $0400		; HSIZE (magnify by 4 horizontally)
-		.WORD $0400		; VSIZE (magnify by 4 vertically)
-		.BYTE $F0		; Palette colors
+		.BYTE ONE_PER_PIXEL+NORMAL_SPRITE+BACKNONCOLL_SPRITE	; SPRCTLO (1 bit/pixel, no flipping, non-collideable sprite)
+		.BYTE LITERAL+RELOAD_HV+DRAW_UP+DRAW_LEFT				; SPRCTL1 (Totally literal, HSIZE and VSIZE specified, drawing starts at upper left quadrant)
+		.BYTE $00			; Colliding sprites
+		.WORD $0000			; Address of next SCB
+		.WORD $5092			; Address of SPRDLINE (sprite data)
+		.WORD $0080			; HPOSSTRT 128
+		.WORD $0048			; VPOSSTRT 72
+		.WORD $0400			; HSIZE (magnify by 4 horizontally)
+		.WORD $0400			; VSIZE (magnify by 4 vertically)
+		.BYTE $F0			; Palette colors (color F: yellow and 0: black)
 
 ; Sprite data (INSERT GAME upside down)
 		.BYTE $04, $E2, $EA, $87		; ...000.0...0.0.0.0000...
@@ -290,18 +289,18 @@ done
 		.BYTE $00						;$ End of quadrant
 
 ; Start of boot sequence
-		LDA SUZYHREV	; Load hardware version (always 1.0 for hardware)
+		LDA SUZYHREV		; Load hardware version (always 1.0 for hardware)
 		BEQ $0000		
 		PLA
 		PLA
 		PLA
 		PLA
 		LDY #CART_POWER_OFF
-		STY IODAT		; Set cartridge power off
+		STY IODAT			; Set cartridge power off
 		INY
-		STY IODIR		; External power and cart address to output
-		STY MAPCTL		; Memory map to 03 (Mikey and Suzy addresses are RAM)
-		STZ $00			; Set $0000 to 0
+		STY IODIR			; External power and cart address to output
+		STY MAPCTL			; Memory map to 03 (Mikey and Suzy addresses are RAM)
+		STZ dest			; Set $0000 to 0
 		JMP ClearMemory
 
 * ===========================================================================
@@ -322,67 +321,67 @@ modulus
 
 MikeyOffsets
 ; Mikey addresses to be initialized (add to Mikey range offset $FD00)
-		.BYTE $90	; SDONEACK
-		.BYTE $92	; DISPCTL
-		.BYTE $95	; DISPADRH
-		.BYTE $94	; DISPADRL
-		.BYTE $93	; PBCKUP
-		.BYTE $09	; TIM2CTLA
-		.BYTE $08	; TIM2BCKUP
-		.BYTE $BF	; BLUEREDF
-		.BYTE $AF	; GREENF
-		.BYTE $B0	; BLUERED0
-		.BYTE $A0	; GREEN0
-		.BYTE $01	; TIM0CTLA
-;		.BYTE $00	; TIM0BCKUP
+		.BYTE <SDONEACK
+		.BYTE <DISPCTL
+		.BYTE <DISPADRH
+		.BYTE <DISPADRL
+		.BYTE <PBKUP
+		.BYTE <TIMER2+TIM_CONTROLA
+		.BYTE <TIMER2+TIM_BACKUP
+		.BYTE <BLUEREDF
+		.BYTE <GREENF
+		.BYTE <BLUERED0
+		.BYTE <GREEN0
+		.BYTE <TIMER0+TIM_CONTROLA
+;		.BYTE <TIMER0+TIM_BACKUP
 
 ; Initialization values for Mikey addresses
 MikeyValues
-		.BYTE $00	; Render sprite command (and also address TIM0BCKUP)
-		.BYTE $0D	; 4 bit color with video DMA enabled
-		.BYTE $20	; Video address at $2000
-		.BYTE $00	; Video address at $2000
-		.BYTE $29	; Magic P value for screen frequency
-		.BYTE $1F	; Enable count and reload, linking
-		.BYTE $68	; 104 backup value for vertical scan timer (== 102 vertical lines plus 2)
-		.BYTE $3E	; Yellow
-		.BYTE $0E	; Yellow
-		.BYTE $00	; Black
-		.BYTE $00	; Black	
-		.BYTE $18	; 2 microseconds timing for horizontal line
-		.BYTE $9E	; 158 backup value for horizontal line scan (160 pixel across)
+		.BYTE $00			; Render sprite command (and also address TIM0BCKUP)
+		.BYTE DISP_COLOR+DISP_FOURBIT+DMA_ENABLE	; 4 bit color with video DMA enabled
+		.BYTE >VID_ORG		; Video address at $2000
+		.BYTE <VID_ORG		; Video address at $2000
+		.BYTE $29			; Magic P value for screen frequency
+		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_LINKING ; $1F: Enable count and reload, linking
+		.BYTE $68			; 104 backup value for vertical scan timer (== 102 vertical lines plus 2)
+		.BYTE $3E			; Yellow
+		.BYTE $0E			; Yellow
+		.BYTE $00			; Black
+		.BYTE $00			; Black	
+		.BYTE $18			; 2 microseconds timing for horizontal line
+		.BYTE $9E			; 158 backup value for horizontal line scan (160 pixel across)
 
 MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values to INIT in loop
 
 ; Suzy addresses to be initialized (add to Suzy range offset $FC00)
 SuzyOffsets
-		.BYTE $91	; SPRGO
-		.BYTE $11	; SCBNEXTH
-		.BYTE $10	; SCBNEXTL
-		.BYTE $09	; VIDBASH
-		.BYTE $08	; VIDBASL
-		.BYTE $06	; VOFFL
-		.BYTE $04	; HOFFL
-		.BYTE $90	; SUZYBUSEN
-		.BYTE $92	; SPRSYS
+		.BYTE <SPRGO
+		.BYTE <SCBNEXTH
+		.BYTE <SCBNEXTL
+		.BYTE <VIDBASH
+		.BYTE <VIDBASL
+		.BYTE <VOFFL
+		.BYTE <HOFFL
+		.BYTE <SUZYBUSEN
+		.BYTE <SPRSYS
 
 ; Initialization values for Suzy addresses (see also $FFE6)
 SuzyValues
-		.BYTE $01	; Draw sprite (no everon detection)
-		.BYTE $50	; SCBNEXT = $5082
-		.BYTE $82	; 
-		.BYTE $20	; VIDBAS = $2000
-		.BYTE $00	; 
-		.BYTE $00	; VOFF = $0000
-		.BYTE $00	; HOFF = $0000
-		.BYTE $01	; Bus enabled
-		.BYTE $00	; Unsigned math, no accumulation, collission on, normal handed 
+		.BYTE SPRITE_GO	; Draw sprite (no everon detection)
+		.BYTE $50			; SCBNEXT = $5082
+		.BYTE $82 
+		.BYTE >VID_ORG		; VIDBAS = $2000
+		.BYTE <VID_ORG
+		.BYTE $00			; VOFF = $0000
+		.BYTE $00			; HOFF = $0000
+		.BYTE $01			; Bus enabled
+		.BYTE $00			; Unsigned math, no accumulation, collission on, normal handed 
 
 SUZYVALS_COUNT	.EQ *-SuzyValues	; number of values to INIT in loop
 
 ; Reserved registers
-		.BYTE $00	; Reserved
-		.BYTE $80	; MAPCTL value
-	 	.WORD $3000	; NMI vector
-	 	.WORD $FF80	; Boot vector
-		.WORD $FF80	; IRQ vector
+		.BYTE $00		; Reserved
+		.BYTE TURBO_DISABLE	; MAPCTL value
+	 	.WORD NMI_ORG		; NMI vector
+	 	.WORD RUN_ORG		; Boot vector
+		.WORD RUN_ORG		; IRQ vector
