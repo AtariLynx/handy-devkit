@@ -14,7 +14,7 @@ The first section ends with an endless loop and which can only be escaped when a
 Assemble all files with Epyx toolkit and encryption tooling:
 
 ```
-asm +L pinky.src
+asm +L +S pinky.src
 asmstrip pinky.bin pinky.raw
 premod pinky.raw pinky.pre
 copy pinky.pre DF0:input
@@ -37,3 +37,4 @@ The other files are for reference:
 |`pinky.enc`|Encrypted header|
 |`pinky.rom`|Postmodded ROM|
 |`pinky.lnx`|Emulation file|
+|`pinky.sym`|Symbols file|

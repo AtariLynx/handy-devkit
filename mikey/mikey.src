@@ -380,7 +380,7 @@ SuzyValues
 SUZYVALS_COUNT	.EQ *-SuzyValues	; number of values to INIT in loop
 
 ; Reserved registers
-		.BYTE $00		; Reserved
+		.BYTE $00			; Reserved
 		.BYTE TURBO_DISABLE	; MAPCTL value
 	 	.WORD NMI_ORG		; NMI vector
 	 	.WORD RUN_ORG		; Boot vector
