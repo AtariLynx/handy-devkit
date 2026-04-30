@@ -1,0 +1,24 @@
+
+* === nix7font.src ==========================================================
+* 
+* HandyPrint Nix-Character 7-Height Font  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+* 
+* Date       Name              Description
+* ---------  ----------------  ----------------------------------------------
+* 13-Feb-89   =RJ Mical=        Created this file!
+* 
+* ===========================================================================
+
+	.BY %10100101
+	.BY %01011010
+	.BY %10100101
+	.BY %01011010
+	.BY %10100101
+	.BY %01011010
+	.BY %10100101
+
+	.END
+

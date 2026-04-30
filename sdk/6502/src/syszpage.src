@@ -1,0 +1,40 @@
+
+* === syszpage.src ==========================================================
+*
+* System Zero-Page Data Allocations  --  the 6502 Side of Handy
+*
+* Copyright (C) 1988, Epyx, Inc.
+* All Rights Reserved
+* CONFIDENTIAL and PROPRIETARY
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+* 19 Apr 89	-RJ		Added description of rule for using sysptrs
+* 22 Mar 89	-RJ		Removed the audio variables from this file
+* 20 Mar 89	RG Goudy	Added several new zpage pointers
+* 26 Jan 89	-RJ		Got rid of Interruptus
+* 26-Dec-88	=RJ Mical=	Created this file from sysdata.src
+*
+* ===========================================================================
+
+
+* NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE
+*
+* This file should be included before any source code or macro usage
+*
+* NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE
+
+
+
+* System programmers note:  the sysptrs are defined as being main-line code
+* pointers.  These can't be used during interrupt code.  Other than that,
+* no promises regarding the usage of these for anything at all, so a JSR
+* while using one of these is a dangerous thing to do
+		BEGIN_ZPAGE
+sysptr		.DS 2
+sysptr2		.DS 2
+sysptr3		.DS 2
+		END_ZPAGE
+
+

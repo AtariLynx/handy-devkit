@@ -1,0 +1,1454 @@
+; Tue Sep 18 17:44:11 1990
+* == hmusic.src ============================================================
+*
+* Handy Music Driver  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	----------------------------------------------
+* 24-Apr-90	SHL		PlayMusic and AddMusic now kill any notes or
+*				sound effects played by previous song
+*				Minor code tightening
+*				ring0_flag and ring1_flag arrays replaced by
+*				ring_flag array
+* 18-Apr-90	SHL		InitHMusic now zeroes all HMUSIC variables
+*				Rests now don't play a 1MHz tone
+*				HMUSIC_DEFAULT_PRIORITY added to give music
+*				a default priority level
+* 26-Mar-90	SHL		Removed PHA, PHX from hmusic_driver
+*				Changed driver exit to match new IRQ handler
+* 6 Oct 89	SHL		Modified driver to catch dropped frames
+* 11 Sept 89	SJ		Used song header offset definitions
+*				Fixed variable initialization and moved vars
+*				out of ROM
+*				Kill a voice's note only if it has a defined
+*				HSFX channel
+*				Fixed handling of muted state
+* 5 Sept 89	Stephen Jungels	Changed most public calls to lock out
+*				audio interrupts, not all interrupts
+* 11 Aug 89	-RJ		Restore I flag at end of int. driver before
+*				clearing audio_interruptus
+* 13 Jul 89	RG		Added PLP to StartVoice return
+* 16 Jun 89	-RJ		Reset Mute_flag in InitHMusic
+*  8 Jun 89	Greg Omi	Added Mute function
+*  1 Jun 89	Steve Landrum	Changed HMUSIC call into HSFX from hsfx_driver
+*				to hsfx_driver_grunt
+* 31 May 89	-RJ		Removed ChannelInUse from this file
+*  1 May 89	-RJ		Changed all IntTable references to sysIntTable
+*				which is defined now in the sys.mac file
+* 18 Apr 89	-RJ		Added PlayMusic
+* 17 Apr 89	-RJ		Changed AddVoice to StartVoice
+* 11 Apr 89	-RJ		Tightened up ESCAPE code a bit, got rid of
+*				infinites, using loop count of 0 for same
+*  9 Apr 89	-RJ		StopMusic and StopVoice disable interrupts.
+*				Added lots more comments while bug-hunting,
+*				fixed many little bugs while bug-hunting.
+*				skip_inner and _outer now not arrays, and
+*				renamed to did_inner and _outer.  Changed
+*				StopHSFX calls to FreeAudio.  mflagsl,h
+*				now not arrays.  ignore_RING now not array and
+*				renamed to did_ring_end
+*  7 Apr 89	-RJ		Put in a deadbolt JSR StopHSFX once a note is
+*				supposed to end.  Solves gating overshot errors
+*  6 Apr 89	-RJ		The setNewVoice routine nows clears state of
+*				ring arrays for that voice.  Also, both
+*				ring_return levels now share common code.
+*  5 Apr 89	-RJ		Added audio_interruptus, now music interrupt
+*				code safely clears interrupt disable while
+*				it's working, allowing other interrupts to
+*				run without risking reentrancy
+*  4 Apr 89	-RJ		InitMusic zeroes out VoiceInUse array
+*  3 Apr 89	-RJ		Disable interrupts before setting User vector
+* 25 Mar 89	-RJ		Made mods too numerous to itemize.  Most
+*				significant:  StartMusic calls AddVoice;
+*				AddVoice expects arg of song table voice index;
+*				ClearUser calls into SetUser; StopMusic calls
+*				StopVoice.  Altogether about 200 bytes smaller.
+* 24 Mar 89	-RJ		Made countless changes, including:  redefining
+*				technique for calling user programs, grouping
+*				all reassignments of audioptr at top of mloop
+* 23 Mar 89	-RJ		Changed AddVoice routine to expect the
+*				voice number in A
+* 22 Mar 89	-RJ		Changed name of voice_in_use to VoiceInUse
+* 21 Mar 89	-RJ Mical-	Added comments, name changes, tightened code
+*				in preparation for first release
+* 24 Jan 89	RG Goudy	Created this file!
+*
+*============================================================================
+
+
+; Changes to do:
+
+
+; Major Bugs
+
+; hspl dumps a direct copy of the muslist into the voice pointer lists.
+; it also sets a field to the total number of voices and sfx, which we don't
+; need.  HSPL should sort the voice offsets so that main voices (non-GSJs)
+; come first, and the field should be set to the number of non-GSJ voices,
+; which we do need to know.
+
+;The ADSR keyframes for each channel don't have to eat all that ROM space.
+;Write a build ADSR routine that fills in the necessary pieces.
+;Define the ADSR keyframe flags using HSFX.i const definitions
+
+
+		BEGIN_ZPAGE
+frequency_ptr	.DS 2
+duration_ptr	.DS 2
+voiceoffsets_ptr .DS 2
+		END_ZPAGE
+
+
+
+InitHMusic
+* ===========================================================================
+* Call this routine to initialize the music driver.  This routine in turn
+* initializes the HSFX driver.
+
+	 php		; Disable IRQs before writing to the vector table
+	  sei
+
+	  jsr InitHSFX				; Init sound effects driver
+
+	  ldx #HMusicVarEnd-HMusicVarStart	; zero all music variables
+.10	    stz HMusicVarStart-1,x
+	    dex
+	   bne .10
+
+	  lda #<hmusic_driver			; link into IRQ vector table
+	  sta sysIntTable+{AUDIO_TIMER*2}
+	  lda #>hmusic_driver
+	  sta sysIntTable+{AUDIO_TIMER*2}+1
+
+	 plp
+
+	rts
+
+
+
+PlayMusic
+* ===========================================================================
+* The PlayMusic routine initializes the specified song table's startup voice
+* pointers to the offsets of the first 4 voices.  Then AddMusic is called.
+*
+* On entry:  the address of a song table is in A,X (low,high)
+* On exit:  X has the highest instance number assigned to a voice (if the
+*           song doesn't specify any initial voices then X will have $FF
+
+	START_DISABLE
+
+	jsr setUpMusicPtrs
+
+	lda #0			; Zero out the 4 voice indices
+	ldy #SONG_STARTUPVOICE3+1
+.0a	  sta (audio_ptr),Y
+	  dey
+	 bpl .0a
+
+	ldy #SONG_MAINVOICES		; Get total number of available voices
+	lda (audio_ptr),Y
+	cmp #HMUSIC_CHANNELCOUNT+1
+	blt .10
+	lda #HMUSIC_CHANNELCOUNT	; Clip to maximum
+.10	asl				; Turn this into an index for moving
+	dec				; that many 2-byte offsets
+	tay
+.20	  lda (voiceoffsets_ptr),Y	; Copy the first n voices into the song
+	  sta (audio_ptr),Y		; table's play-voice array
+	  dey
+	 bpl	.20
+
+	bra addMusicEntry	; branch into middle of AddMusic
+
+
+
+AddMusic
+* ===========================================================================
+* The AddMusic routine performs two functions:  it installs the specified
+* song data table into the hmusic driver, and if the song data table defines
+* any voices that should start playing immediately (typically they do) then
+* AddMusic launches those voices.
+*
+* Each voice launched by AddMusic (if any) gets a unique instance number,
+* in ascending order, starting from 0.
+*
+* If another song is playing when this routine is called, all references to
+* the previous song are completely removed.
+*
+* This routine sets up the hmusic variable hmusic_base, which is used by all
+* of the hmusic routines and interrupt code to reference your song table.
+*
+* On entry:  the address of a song table is in A,X (low,high)
+* On exit:  X has the highest instance number assigned to a voice (if the
+*           song doesn't specify any initial voices then X will have $FF
+
+	START_DISABLE
+
+	jsr setUpMusicPtrs
+
+addMusicEntry
+
+	stz instance		; Unique ID for referencing voices
+
+	lda #HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-1}*2}
+	sta voice0		; initialize default priorities
+ #IF HMUSIC_CHANNELCOUNT>1
+	lda #HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-2}*2}
+	sta voice1
+ #ENDIF
+ #IF HMUSIC_CHANNELCOUNT>2
+	lda #HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-3}*2}
+	sta voice2
+ #ENDIF
+ #IF HMUSIC_CHANNELCOUNT>3
+	lda #HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-4}*2}
+	sta voice3
+ #ENDIF
+
+	;-- For each of the initial voices (if any), load up the
+	;-- hmusic voice arrays using the song table data
+
+	ldx #HMUSIC_CHANNELCOUNT-1	; Voice index
+	ldy #0				; Song table index
+
+.05	  stz VoiceInUse,x		; Start by presuming no voice
+	  stz SFX_to_cancel,x		; Wipe out MSFX calls
+	  lda #HSFX_CHANNELCOUNT	; Set this voice to no channel
+	  sta VoiceHSFXChannel,x
+
+	  lda (audio_ptr),y		; Get offset of individual voice
+	  iny
+	  sta voicedata_ptrl,x
+	  lda (audio_ptr),y
+	  iny
+	  sta voicedata_ptrh,x
+	  ora voicedata_ptrl,x	; Was offset zero?
+	  beq .09			; If so, voice not specified
+	  jsr setNewVoice		; else set up to launch new voice
+
+.09	  dex		; Next voice
+	 bpl .05	; Branch if another to do
+
+voiceReturn
+	ldx instance		; Return highest number assigned
+	dex
+
+	END_DISABLE
+
+	clc			; Return with success
+	rts
+
+
+
+
+setUpMusicPtrs
+	 pha
+	   phx
+	    jsr stopAllVoices
+	   plx
+	 pla
+
+	sta audio_ptr		; Set up pointers to copy the voice offsets
+	sta hmusic_base
+	stx audio_ptr+1
+	stx hmusic_base+1
+
+	clc
+	adc #<SONG_VOICEFX_OFFSETS
+	sta voiceoffsets_ptr
+	txa
+	adc #>SONG_VOICEFX_OFFSETS
+	sta voiceoffsets_ptr+1
+
+	rts
+
+
+
+
+
+setNewVoice
+* ==========================================================================
+* Set up to launch a new voice.
+*
+* On entry:
+*    - voicedata_ptrl,h has the song table offset of the voice to be added
+*    - X has the voice channel number
+* On exit:
+*    - A is trashed
+*    - voicedata_ptrl,h points to the actual address of the voice's data
+*    - Everything is set up for hmusic to launch the new voice
+
+
+	clc		; Turn the voice data offset into a voice data pointer
+	lda hmusic_base
+	adc voicedata_ptrl,x
+	sta voicedata_ptrl,x
+	lda hmusic_base+1
+	adc voicedata_ptrh,x
+	sta voicedata_ptrh,x
+
+	inc VoiceInUse,x	; set VoiceInUse non-zero
+
+	stz voice_endframel,x	; Set voice frame to 0, frames alive to -1.
+	stz voice_endframeh,x	;  Fool the hmusic driver into thinking that
+	lda #$ff		;   it's time to load the "next" (actually the
+	sta frames_alivel,x	;    first) data for this voice
+	sta frames_aliveh,x
+
+	lda instance		; This voice gets the next instance number
+	sta VoiceInstance,x
+	inc instance		; Bump instance number for next voice
+
+	stz ring_flag,x		; Zero out any ring state
+;	stz ring1_flag,x
+
+	stz restore_ds,x	; Zero the decay/sustain restore flag
+
+musicReturn			; This RTS is referenced several times
+	rts
+
+
+
+ #IFDEF STARTVOICE_USER
+StartVoice
+* ===========================================================================
+* The StartVoice routine causes one of the current song's voices to start
+* playing.  The number of the voice to play is passed in A.
+*
+* This routine lets you start any voice at any time.  It is for specialized
+* control of music, and is not required for the normal playing of a song.
+*
+* Note:  you must call AddMusic or PlayMusic before calling StartVoice.
+*
+* Note:  if you intend on using StartVoice, you must define the constant
+* STARTVOICE_USER to have the code included in your assembly.
+*
+* On entry:  A has the offset of the voice to be added
+* On exit:  Registers A and Y are trashed.  If voice added carry is clear and
+*           X has the voice's instance number assigned; if the voice couldn't
+*           be added, carry is set.
+*
+
+	 START_DISABLE
+
+	  asl	; Turn the offset number into a song table index
+	  tay
+
+	  ldx #HMUSIC_CHANNELCOUNT-1	; Check for free a voice channel
+.10	    lda VoiceInUse,x		; Is this voice channel available
+	    beq .20			; If so, grab it
+	    dex
+	   bpl .10
+
+	 END_DISABLE	;-- No free voice channel found.  Return failure result
+
+	sec
+	rts
+
+
+.20	  lda (voiceoffsets_ptr),y	; Get offset of this voice's data
+	  sta voicedata_ptrl,x
+	  iny
+	  lda (voiceoffsets_ptr),y
+	  sta voicedata_ptrh,x
+
+	  jsr setNewVoice		; Set up to launch this voice
+	  bra voiceReturn
+
+ #ENDIF ; of #IFDEF STARTVOICE_USER
+
+
+
+
+ #IFDEF STOPMUSIC_USER
+StopMusic
+* ===========================================================================
+* StopMusic immediately stops and silences all currently active HMUSIC
+* voices.
+*
+* After the voices are stopped, the HMUSIC voice channels are all available
+* and the HSFX audio channels used by the voices are all free.
+*
+* This routine doesn't disturb the song in the hmusic driver.  After calling
+* this routine, subseuent calls to StartVoice can be made to start new voices.
+*
+* Note:  the effects of this routine occur immediately, not during the
+* next audio interrupt.
+
+	 START_DISABLE
+
+	  jsr stopAllVoices
+
+	 END_DISABLE
+
+	rts
+ #ENDIF ; of #IFDEF STOPMUSIC_USER
+
+
+
+stopAllVoices
+* ===========================================================================
+* stopAllVoices immediately stops and silences all currently active HMUSIC
+* voices.
+*
+* After the voices are stopped, the HMUSIC voice channels are all available
+* and the HSFX audio channels used by the voices are all free.
+*
+* This routine doesn't disturb the song in the hmusic driver.  After calling
+* this routine, subseuent calls to StartVoice can be made to start new voices.
+*
+* Note:  the effects of this routine occur immediately, not during the
+* next audio interrupt.
+
+	ldx #HMUSIC_CHANNELCOUNT-1
+.10	   phx
+	    jsr stopVoiceX
+	   plx
+	  dex
+	 bpl .10
+
+	rts
+
+
+ #IFDEF STOPVOICE_USER
+StopVoice
+* ===========================================================================
+* StopVoice immediately stops and silences a single HMUSIC voice, if
+* the voice is currently playing.  The X register should have the instance
+* of the voice to be stopped.
+*
+* Note:  the effects of this routine occur immediately, not during the
+* next audio interrupt.
+*
+* On entry:  X has the instance number of the voice to be removed
+* On exit:   if voice found and removed, carry is clear; if no voice found
+*            to match the instance number, carry is set
+
+	 START_DISABLE
+	  txa
+	  ldx #HMUSIC_CHANNELCOUNT-1
+.11	    ldy VoiceInUse,x	; Is this voice active?
+	    beq .22
+	    cmp VoiceInstance,x	; Is this our voice?
+	    beq .33
+.22	    dex
+	   bpl .11
+
+	 END_DISABLE	; Instance number not matched. Return failure result
+	sec
+	rts
+
+
+.33	  jsr stopVoiceX	; kill this voice
+	 END_DISABLE
+	clc
+	rts
+
+ #ENDIF ; of #IFDEF STOPVOICE_USER
+
+
+
+stopVoiceX
+	lda VoiceInUse,x	; is voice already stopped?
+	bne .00
+	rts
+
+.00	stz VoiceInUse,x	; Remove from music queue
+
+muteVoiceX
+	ldy voice_offsets,x	; Get offset to this voice's data
+	lda voice0,y		; Get the priority of this voice
+	ora SFX_to_cancel,x	; or the sound effect being played
+.10	tay
+	jmp StopHSFX		; Tell HSFX to kill current note/MSFX
+
+
+
+ #IFDEF USERCALLS_USER
+ClearUser
+* ===========================================================================
+* ClearUser stops the hmusic driver from using calls into your code when
+* song data USER directives are encountered.
+*
+* It's safe to call this code whenever you want, regardless of whether
+* you've called SetUser.
+
+	lda #<musicReturn
+	ldx #>musicReturn
+
+* ... and fall intentionally into SetUser
+
+
+SetUser
+* ===========================================================================
+* SetUser is used to cause the hmusic driver to JSR into your code whenever
+* a USER directive is encountered in your song data.
+*
+* You specify the address of your USER subroutine in registers A,X (low,
+* high).  Your routine should end with an RTS.  You don't need to preserve
+* any registers, you need only preserve the statee of the I and D flags.
+*
+* Remember that your code will be running during interrupt, so keep it short
+* and sweet.
+
+* NOTE:  this code in fallen into from above
+
+	 START_DISABLE
+
+	  sta userJSR+1
+	  stx userJSR+2
+
+	 END_DISABLE
+
+	rts
+
+ #ENDIF ; of #IFDEF USERCALLS_USER
+
+
+
+ #IFDEF MUTE_USER
+Mute
+* ===========================================================================
+* Turns off music but keeps playing silently
+* toggles every time called
+
+	 pha
+	  lda Mute_flag
+	  eor #$ff
+	  sta Mute_flag
+	  beq .30
+	   phx
+	     phy
+	      ldx #HMUSIC_CHANNELCOUNT-1
+
+.10		ldy VoiceInUse,x	; Is this voice active?
+		beq .20			; Branch if not active
+		 phx
+		  jsr muteVoiceX	; Tell HSFX to kill current note/MSFX
+		 plx
+.20		dex			; Try next voice
+	       bpl .10			; Branch if there's more to try
+
+	     ply
+	   plx
+
+.30	 pla
+	rts
+
+ #ENDIF	; of #IFDEF MUTE_USER
+
+
+
+* === =======================================================================
+* ===                     ===================================================
+* ===    Interrupt Code   ===================================================
+* ===                     ===================================================
+* === =======================================================================
+
+
+
+hmusic_driver
+* ===========================================================================
+* Here's the hmusic driver interrupt code
+* If you *have* to understand what this code does, good luck to you!
+*
+* The audio driver turns itself into "low-priority" interrupt code by
+* enabling interrupts as soon as it has protected itself against being
+* reentered.  This will allow more important (especially time-critical)
+* interrupt routines to wrest control away from audio whenever necessary.
+
+	;-- Test if this is a music interrupt re-entering
+	;-- If audio_interruptus is zero, this is a top-level entry
+	;-- into the interrupt code so it's safe to proceed.  But
+	;-- if audio_interruptus isn't zero we're re-entering ... we
+	;-- got so pushed so deep in the queue that another audio
+	;-- interrupt occurred!  It's not safe to re-enter, so split
+	;-- (causing the audio to skip a beat, it's true).
+	inc audio_dropout	; count frame
+	lda audio_lockout	; are we being locked out?
+	bne .12
+	lda audio_interruptus	; are we interrupting ourself?
+	beq .10
+.12	inc audio_dropout	; count frames we've dropped
+
+	plx			; exit IRQ
+	pla
+	rti
+
+.10	inc audio_interruptus	; Mark that we are here
+	cli			; and let other interrupts run
+
+hmusic_interrupt_core
+	 phy
+
+ #IFDEF	USERCALLS_USER
+	  stz USER_count	; No USER directives encountered yet
+ #ENDIF
+
+* For each active voice, check if we need to start the next note or if this
+* note's volume has fallen to zero
+
+	  ldx #HMUSIC_CHANNELCOUNT-1	; Loop for voices
+voiceLoop
+	    lda VoiceInUse,x	; Voice active?
+	    beq voiceLoopEnd	; Branch if not
+
+	    inc frames_alivel,x	; increment number of frames note's been alive
+	    bne .18
+	    inc frames_aliveh,x
+
+.18	    lda frames_alivel,x		; is it time to get a new note?
+	    cmp voice_endframel,x
+	    bne .17
+	    lda frames_aliveh,x
+	    cmp voice_endframeh,x
+	    bne .17
+
+	    lda VoiceHSFXChannel,x	; Get this voice's HSFX channel
+	    cmp #HSFX_CHANNELCOUNT	; does this voice have a channel?
+	    bcs .cd
+	     phx
+	      ldy voice_offsets,x	; Get offset to this voice's data
+	      tax
+	      lda voice0,y		; See if this voice still has channel
+	      cmp ChannelInUse,x
+	      bne .ce
+	      jsr freeChannelX		; free the channel
+.ce	     plx
+
+.cd	    jsr getNextData	; Load next note data
+	    stz frames_alivel,x	; Reset the number of frames note has lived
+	    stz frames_aliveh,x
+	    bra voiceLoopEnd
+
+.17	    ldy voice_offsets,x		; Get offset of voice's keyframes
+	    lda frames_alivel,x		; Are we in release stage?
+	    cmp releaseframe_v0,y
+	    lda frames_aliveh,x
+	    sbc releaseframe_v0+1,y
+	    bcc voiceLoopEnd
+
+.22	    lda VoiceHSFXChannel,x	; Get HSFX channel of this voice
+	    cmp #HSFX_CHANNELCOUNT	; ignore if this voice has no channel
+	    bcs voiceLoopEnd
+	     phx
+	      tax
+	      lda voice0,y		; See if we still own channel
+	      cmp ChannelInUse,x
+	      bne .29
+	      lda volumel,x		; check for volume close to zero
+	      cmp releaseframe_v0+8,y
+	      lda volumeh,x
+	      beq .27
+	      sbc releaseframe_v0+9,y
+	      bcc .29
+
+.27	      jsr freeChannelX		; close enough to zero, kill sound
+
+.29	     plx
+
+voiceLoopEnd	;-- Process the next channel
+	    dex
+	   bpl voiceLoop
+
+.10
+* Check each of the voices.  If it's at the start of a new note,
+* launch the note's pre-calculated HSFX sound effect keyframes.
+
+	  ldx #HMUSIC_CHANNELCOUNT-1
+voiceLaunchLoop
+	    asl new_note,x	; Top bit of new_note set?
+	    bcc .c0		; Branch if not
+
+ #IFDEF MUTE_USER
+	    bit Mute_flag	; Is the mute flag set?
+	    bmi .c0		; Branch if negative to mute
+ #ENDIF
+
+	     phx		; Launch new keyframe set for new note
+	      ldy voice_offsets,x	; Get offset to this voice's data
+	      lda voice0,y		; Get the priority of this voice
+	      tay			; Copy the priority for StartHSFX
+
+	      lda voice_offsets,x	; Get offset to this voice's data
+	      clc			; Add address of first keyframe
+	      adc #<attackframe_v0
+	      ldx #>attackframe_v0	; Get high byte into X
+	      bcc .b8
+	      inx
+.b8	      jsr StartHSFX		; Start this note "sound effect"
+	      txa			; Grab copy of channel
+	     plx
+	    sta VoiceHSFXChannel,x	; Save copy of this voice's channel
+
+.c0	    dex
+	   bpl voiceLaunchLoop
+
+
+ #IFDEF	USERCALLS_USER
+	  ldx USER_count	; Did any voice specify a USER call?
+	  beq userDone
+
+	  dex			; Turn the count into the maximum index
+
+userJSR
+	  jsr musicReturn	; ** WARNING:  modified **
+userDone
+ #ENDIF	; of #IFDEF USERCALLS_USER
+
+	  jsr hsfx_driver_grunt	; Call HSFX driver
+
+	 ply
+
+	dec audio_dropout	; count off frame
+	beq .00
+	jmp hmusic_interrupt_core	; catch dropped frames
+
+.00	stz audio_interruptus	; reset flag so we know it's OK
+	plx			; exit IRQ
+	pla
+	rti
+
+
+
+getNextData
+* ===========================================================================
+* Load up the data for the voice's next note.  This includes processing zero
+* or more CFW's until an honest note is found which is used to set up the
+* HSFX keyframes.
+*
+* On entry:  X has the voice channel number
+	ldy voice_offsets,x	; Get offset to this voice's data
+
+	asl restore_ds,x	; Should we restore the decay and sustain?
+	bcc .10
+
+	lda save_decayl,x	; Restore time to start decay
+	sta decayframe_v0,y
+	lda save_decayh,x
+	sta decayframe_v0+1,y
+	lda save_sustainl,x	; Restore time to start sustain
+	sta sustainframe_v0,y
+	lda save_sustainh,x
+	sta sustainframe_v0+1,y
+
+.10	stz did_innernext	; Reset loop skip flags
+	stz did_outernext
+	stz did_ring_end	; Reset ring end flag
+
+	;-- Check if there's an HSFX currently playing for this voice
+	lda SFX_to_cancel,x	; Maybe active.  Got a cancel stash?
+	beq mloop_frame		; If not, then skip
+
+	;-- There's currently an HSFX for this voice.  Kill it
+	sta voice0,y		; Restore music priority from stash
+	tay			; and specifically stop sfx
+	 phx
+	  jsr StopHSFX
+	 plx
+	stz SFX_to_cancel,x	; Set sfx as stopped (clear stash)
+
+
+mloop_frame
+* Here, we process the next block of data in the note table.
+	  lda voicedata_ptrl,x	; Get a z-page pointer to voice data
+	  sta audio_ptr
+	  lda voicedata_ptrh,x
+	  sta audio_ptr+1
+
+	  lda (audio_ptr)		; Find out what to do this time
+	  bmi do_CFW		; If high bit clear, this is a note
+	  jmp do_note		; else this is a CFW
+
+
+
+do_CFW
+* ---------------------------------------------------------------------------
+* Next note table entry is a Command Flags Word (not an actual note)
+
+	  sta hmflagsl		; Grab a copy of these new command flags
+	  ldy #1		; Y will be the voice data index
+	  lda (audio_ptr),y
+	  sta hmflagsh
+	  iny
+
+* --- Rings ---
+	  lda hmflagsh		; is RING flag set?
+	  and #>RING
+	  beq ring_considered	; Branch if not RING
+
+	  lsr did_ring_end	; Did we loop to the CFW that sent us a ring?
+	  bcs post_ring		; Branch if returning to ring starter
+
+	  lda ring_flag,x	; Are we already doing level 0 ring?
+	  beq first_RING
+
+	  lda audio_ptr		; Nested ring, do level '1'
+	  sta ring1_returnl,x	: Stash the current note table
+	  lda audio_ptr+1	; pointer as our return location
+	  sta ring1_returnh,x	; at end of ring 1
+
+	  lda #2
+	  sta ring_flag,x	; Mark RING1 as active
+	  bra new_RING		; and go set up this new ring
+
+first_RING			; We've got the start of a level 0 ring
+	  lda audio_ptr		: Stash the current note table
+	  sta ring0_returnl,x	; pointer as our return location
+	  lda audio_ptr+1	; at end of ring 0
+	  sta ring0_returnh,x
+
+	  inc ring_flag,x	; Mark RING0 as active
+
+new_RING			; Set up the pointers to handle this new ring
+	  lda (audio_ptr),y	; Get voice index
+	  asl a			; Change to word index
+	  tay
+;	  clc	; true from above
+	  lda (voiceoffsets_ptr),y ; Get offset of voice data
+	  adc hmusic_base	; and use it to create new voice data pointer
+	  sta voicedata_ptrl,x
+	  iny
+	  lda (voiceoffsets_ptr),y
+	  adc hmusic_base+1
+	  sta voicedata_ptrh,x
+
+	 jmp mloop_frame	; Take it from the top with voice's new data
+
+post_ring	;-- Just returned from the ring, so ignore it this time
+	iny			; Skip ring index byte
+
+
+ring_considered	;-- Done thinking about rings for now
+
+
+* --- Loops ---
+
+; Inner loop - bottom
+
+	  lda did_innernext	; Did we get here after processing
+	  ora did_outernext	; either an inner or outer NEXT?
+	  bne mnext0_done	; If so, skip processing NEXTs
+
+	  lda hmflagsh
+	  and #>NEXT1		; At the bottom of an inner loop?
+	  beq mnext1_done	; No
+
+	  lda mloop_count1,x	; Infinite loop?
+	  beq takeloop1		; Yes, don't count
+	  dec mloop_count1,x	; No, are we done?
+	  beq mnext1_done	; Yes, go check next flag
+
+takeloop1
+	  lda mloop_adrl1,x	; Reload pointer to top of loop
+	  sta voicedata_ptrl,x
+	  lda mloop_adrh1,x
+	  sta voicedata_ptrh,x
+	  inc did_innernext	; Set to skip LOOP1 we'll find there
+	 jmp mloop_frame	; and go do top of loop
+mnext1_done
+
+
+
+; Outer loop - bottom
+;;;	  lda did_innernext	; Did we get here after processing
+;;;	  ora did_outernext	; either an inner or outer NEXT?
+;;;	  bne mnext0_done	; If so, skip processing outer NEXT
+
+	  lda hmflagsh
+	  and #>NEXT0		; Are we at the bottom of an outer loop?
+	  beq mnext0_done	; Branch if not
+
+	  lda mloop_count0,x	; Infinite loop?
+	  beq takeloop0		; Yes, don't count
+	  dec mloop_count0,x	; No, are we done?
+	  beq mnext0_done	; Yes, go check next flag
+
+takeloop0	;-- Loop back to the top of the outer loop
+	  lda mloop_adrl0,x	; Reload pointer to top of loop
+	  sta voicedata_ptrl,x
+	  lda mloop_adrh0,x
+	  sta voicedata_ptrh,x
+	  inc did_outernext	; Set to skip LOOP0 we'll find there
+	 jmp mloop_frame	; and go do top of loop
+mnext0_done
+
+
+
+; Outer loop stuff - top
+	  lda hmflagsh
+	  and #>LOOP0		; Are we starting an outer loop?
+	  beq mloop0_considered	; Branch if not
+
+	  lda did_innernext	; Did we get here after processing
+	  ora did_outernext	; either an inner or outer NEXT?
+	  bne mstuff0		; If so, skip processing outer LOOP0
+
+	  lda audio_ptr		; Stash current data pointer
+	  sta mloop_adrl0,x
+	  lda audio_ptr+1
+	  sta mloop_adrh0,x
+	  lda (audio_ptr),y	; Get # of loops to do
+	  sta mloop_count0,x	; (if 0, infinite loop!)
+mstuff0
+	  iny			; Bump index past loop count
+
+mloop0_considered
+
+
+
+; Inner loop - top
+	  lda hmflagsh
+	  and #>LOOP1		; Are we starting an inner loop?
+	  beq mloop1_considered	; Branch if not
+
+	  lda did_innernext	; If we've done an inner loop NEXT
+	  bne mstuff1		; then skip processing this loop start
+
+	  lda audio_ptr		; Stash current data pointer
+	  sta mloop_adrl1,x
+	  lda audio_ptr+1
+	  sta mloop_adrh1,x
+	  lda (audio_ptr),y	; Get # of loops to do
+	  sta mloop_count1,x	; (if 0, infinite loop!)
+mstuff1
+	  iny			; Bump index past loop count
+
+mloop1_considered
+
+
+* --- Gating ---
+
+	  lda hmflagsh
+	  and #>ASD+AGD		; Either ASD or ADG gate value?
+	  beq asd_agd_considered	; Branch if not
+
+	  sta gating,x		; Save new gating flags
+	  lda (audio_ptr),y	; and get new gating value
+	  sta gatel,x
+	  iny
+	  lda (audio_ptr),y
+	  sta gateh,x
+	  iny
+
+asd_agd_considered
+
+
+* --- Music HSFX ---
+	  lda hmflagsl
+	  and #MSFX		; Should this voice be a sound effect?
+	  beq msfx_considered	; Branch if not
+
+	   phx
+	     phy
+
+	      ldy voice_offsets,x	; Get offset to this voice's data
+	      lda voice0,y		; Get this voice's current priority
+	      sta SFX_to_cancel,x	; Save for killing effect later
+	      sta hsfx_temp
+	      lda #0			; Temporarily set this note's priority
+	      sta voice0,y		; to 0 to prevent HSFX conflict
+
+	#IFDEF MUTE_USER
+	      bit Mute_flag		; Is the mute flag set?
+	      bmi .b9			; Branch if negative to mute
+	#ENDIF
+
+	     ply			; Restore argument index
+	     phy
+	      lda (audio_ptr),y	; Get index into SFX offset table
+	      asl a			; Make it a word index
+	      tay
+	      lda (voiceoffsets_ptr),y ; Get offset of first keyframe
+	      clc
+	      adc hmusic_base		; and create the keyframe address
+	       pha
+		iny
+		lda (voiceoffsets_ptr),y
+		adc hmusic_base+1
+		tax			; High byte of address
+	       pla			; Low  byte of address
+	      ldy hsfx_temp		; Priority of voice/effect
+	      jsr StartHSFX		; Start this note "sound effect"
+
+.b9	     ply
+	    iny
+	   plx
+	  lda voicedata_ptrl,x	; Restore our voice data pointer
+	  sta audio_ptr		; (trashed by StartHSFX)
+	  lda voicedata_ptrh,x
+	  sta audio_ptr+1
+msfx_considered
+
+
+* --- User Call ---
+	  lda hmflagsl
+	  and #USER		; Some USER data to send?
+	  beq user_considered	; Branch if not
+
+	#IFDEF	USERCALLS_USER
+	   phx
+	    ldx USER_count
+	    cpx #HMUSIC_USERCOUNT
+	    bge .10
+	    lda (audio_ptr),y
+	    sta MusicUserArgs,x	; Pass parameter to user
+	    inc USER_count
+.10	   plx
+	#ENDIF ; of #IFDEF USERCALLS_USER
+	  iny
+
+user_considered
+
+
+* --- Duration Table Selector ---
+	  lda hmflagsl
+	  and #DURATION		; New duration table?
+	  beq dur_tbl_considered
+
+	  lda (audio_ptr),y	; Yes, get offset to duration table
+	  clc
+	  adc hmusic_base	; and convert to absolute address
+	  sta voice_dur_ptrl,x	; and store new address of duration table
+	  iny
+	  lda (audio_ptr),y
+	  adc hmusic_base+1
+	  sta voice_dur_ptrh,x
+	  iny
+
+dur_tbl_considered
+
+
+* --- Pitch Table Selector ---
+	  lda hmflagsl
+	  and #PITCH		; New pitch table?
+	  beq freq_tbl_considered
+
+	  lda (audio_ptr),y	; Yes, get offset to pitch table
+	  clc
+	  adc hmusic_base
+	  sta voice_freq_ptrl,x	; and convert to absolute address
+	  iny			; and store new address of pitch table
+	  lda (audio_ptr),y
+	  adc hmusic_base+1
+	  sta voice_freq_ptrh,x
+	  iny
+
+freq_tbl_considered
+
+
+* --- Keyframe Raw Data ---
+* This is how the normal ADSR for a voice gets loaded.  Also, this is how
+* the sound guys can slip in craazy sound effects with little hassle.
+* First comes an optional byte that designates Standard Clear, which
+* causes a bunch of keyframe fields to be cleared.
+* Next, escape data comes in 3 bytes:  offset into song data of the keyframe
+* data, next two bytes are low and high data to go in that location.
+* Lastly the end of the escape data is designated either by a regular
+* music note or a byte of $FF (meaning End Of Escape).
+
+	  lda hmflagsl
+	  and #ESCAPE		; Load raw data into keyframe set?
+	  beq escape_considered	; Branch if not
+
+	   phx
+	    lda voice_offsets,x	; Get offset to this voice's data
+	    sta hsfx_temp
+
+	    lda (audio_ptr),y	; Get first ESCAPE argument
+	    cmp #$ff		; Clear some seldom used locations?
+	    bne .44		; Branch if not
+
+	     phy	; Clear several elements in this voice's keyframes
+	      ldy #clear_voice_end-clear_voice-1 ; Get max clear_voice offset
+.22		lda clear_voice,y	; Create offset to the voice's element
+;		clc	; clear from above
+		adc hsfx_temp
+		tax
+		stz voice0,x
+		stz voice0+1,x
+		dey
+	       bpl .22
+	     ply
+	    iny
+
+.44	    lda (audio_ptr),y	; get next note or ESCAPE flag
+	    bpl end_escape	; High bit off = end of escape sequence
+
+	    iny			; Advance index past this byte
+
+	    ; If byte is the special "end of escape" value then split
+	    cmp #$ff		; Note: only needed if two adjacent
+	    beq end_escape	;  CFWs - i.e.: consecutive RING
+
+	    ;-- Else this is normal escape data, so get the data and
+	    ;-- store it into the keyframe and try again
+	    and #$7f		; Mask off upper bit
+	    clc
+	    adc hsfx_temp	; Add voice offset
+	    tax
+	    lda (audio_ptr),y	; Copy value
+	    sta voice0,x
+	    iny
+	    lda (audio_ptr),y
+	    sta voice0+1,x
+	    iny
+	    bra .44
+
+end_escape
+	   plx
+
+	   phy
+	    ldy voice_offsets,x		; Get offset to this voice's keyframes
+	    lda decayframe_v0,y		; back up decay times
+	    sta save_decayl,x
+	    lda decayframe_v0+1,y
+	    sta save_decayh,x
+	    lda sustainframe_v0,y	; back up sustain times
+	    sta save_sustainl,x
+	    lda sustainframe_v0+1,y
+	    sta save_sustainh,x
+	   ply
+
+
+escape_considered
+* --- Almost at End ---
+	  lda hmflagsl		; check for final CFW
+	  and #END_OF_VOICE
+	  bne end_voice		; Branch if so
+
+	  tya			; skip bytes just processed
+	  clc
+	  adc audio_ptr
+	  sta voicedata_ptrl,x
+	  lda #0
+	  adc audio_ptr+1
+	  sta voicedata_ptrh,x
+	 jmp mloop_frame	; else go to top and do it all again
+
+
+end_voice
+* --- End of Voice ---
+	  lsr ring_flag,x	; Is a 'RING' ending?
+	  bne return_from_ring1	; Branch if RING1 ending
+	  bcs return_from_ring0	; Branch if RING0 ending
+	  stz VoiceInUse,x	; else this voice is done!
+	rts			; RG sez:  Ttfn
+
+return_from_ring1
+	  lda ring1_returnl,x	; Restore 'RING0' address
+	  ldy ring1_returnh,x
+	  bra ring_return
+
+return_from_ring0
+	  lda ring0_returnl,x	; Restore main voice address
+	  ldy ring0_returnh,x
+
+ring_return
+	  sta voicedata_ptrl,x	; restore CFW to return from ring
+	  tya
+	  sta voicedata_ptrh,x
+	  inc did_ring_end
+	 jmp mloop_frame
+
+
+
+
+do_note
+* ---------------------------------------------------------------------------
+* Next note table entry is an actual note (not a Command Flags Word)
+
+	 phx
+
+	  and #SONG_PITCHBITS	; turn note entry into frequency offset
+	  asl a			;  0dddpppp -> 000pppp0
+	  tay
+
+	  lda #HSFX_CHANNELCOUNT	; mark that we have no channel
+	  sta VoiceHSFXChannel,x
+
+	  lda voice_freq_ptrl,x		; Set up note's frequency pointer
+	  sta frequency_ptr
+	  lda voice_freq_ptrh,x
+	  sta frequency_ptr+1
+
+	  lda voice_dur_ptrl,x		; Set up note's duration pointer
+	  sta duration_ptr
+	  lda voice_dur_ptrh,x
+	  sta duration_ptr+1
+
+	  lda voice_offsets,x		; get offset to voice's HSFX keyframes
+	  tax
+
+	  lda (frequency_ptr),y		; Load up the frequency for this note
+	  sta attackfreq_v0,x
+	  iny
+	  lda (frequency_ptr),y
+	  sta attackfreq_v0+1,x
+	  ora attackfreq_v0,x		; check for zero frequency
+	   pha				; save for later
+
+	    lda (audio_ptr)		; turn note entry into duration offset
+	    and #SONG_DURATIONBITS	;  0dddpppp -> 0000ddd0
+	    lsr a
+	    lsr a
+	    lsr a
+	    tay
+
+	    lda (duration_ptr),y	; Jam value into the end note keyframe
+	    sta endframe_v0,x
+	    iny
+	    lda (duration_ptr),y
+	    sta endframe_v0+1,x
+
+	   pla			; restore zero frequency check
+	 plx			; Restore the voice channel number
+
+	cmp #0			; test for pitch set to 0
+	beq .00
+
+	lda #$80	; if non-zero pitch, set flag marking new note
+	sta new_note,x
+
+.00	lda (duration_ptr),y	; save duration value for music driver
+	sta voice_endframeh,x
+	dey
+	lda (duration_ptr),y
+	sta voice_endframel,x
+
+	ldy voice_offsets,x	; Get offset to this voice's keyframes
+	lda gating,x		; Get gating flags, check for AGS or AGD
+	and #>AGD		; AGD?
+	bne .10			; Branch if AGD (not AGS)
+
+	sec			; Set up AGS
+	lda voice_endframel,x	;  (start of release = duration - gate time)
+	sbc gatel,x
+	sta releaseframe_v0,y
+	lda voice_endframeh,x
+	sbc gateh,x
+;	sta releaseframe_v0+1,y	; done below
+	bra .19
+
+.10	lda gatel,x		; Set up AGD (start of release = gate time)
+	sta releaseframe_v0,y
+	lda gateh,x
+.19	sta releaseframe_v0+1,y
+
+	lda sustainframe_v0,y	; Check that sustain starts before release
+	cmp releaseframe_v0,y
+	lda sustainframe_v0+1,y
+	sbc releaseframe_v0+1,y
+	bcc .40
+
+	lda #$80		; Mark need to restore decay and sus
+	sta restore_ds,x
+
+	sec			; Set sustain time to (release time - 1)
+	lda releaseframe_v0,y
+	sbc #1
+	sta sustainframe_v0,y
+	lda releaseframe_v0+1,y
+	sbc #0
+	sta sustainframe_v0+1,y
+
+	lda decayframe_v0,y	; Check that decay starts before sustain
+	cmp sustainframe_v0,y
+	lda decayframe_v0+1,y
+	sbc sustainframe_v0+1,y
+	bcc .40
+
+	sec			; Set decay time to (sustain time - 1)
+	lda sustainframe_v0,y
+	sbc #1
+	sta decayframe_v0,y
+	lda sustainframe_v0+1,y
+	sbc #0
+	sta decayframe_v0+1,y
+
+.40	inc voicedata_ptrl,x	; Point to next entry in voice table
+	bne .7d
+	inc voicedata_ptrh,x
+
+.7d	rts
+
+
+
+
+* === ======================================================================
+* ===               ========================================================
+* ===      Data     ========================================================
+* ===               ========================================================
+* === ======================================================================
+
+
+
+
+* The voice_offsets describe the number of bytes between the
+* first byte of voice 0's data and the first byte of voice n's data
+
+voice_offsets	.by 0
+
+	#if HMUSIC_CHANNELCOUNT > 1
+		.by voice1-voice0
+	 #if HMUSIC_CHANNELCOUNT > 2
+		.by voice2-voice0
+	  #if HMUSIC_CHANNELCOUNT > 3
+		.by voice3-voice0
+	  #endif ; > 3
+	 #endif ; > 2
+	#endif ; > 1
+
+
+
+
+* NOTE:  ====================================================================
+* NOTE:  The position of the following note arrays is very critical.  Much
+* NOTE:  of the above code depends on the exact arrangement of this data.
+* NOTE:  You would have to be mad to rearrange this stuff.
+
+clear_voice	.by $08		; Attack  keyframe  shifter   accumulator
+		.by $0c		; Attack  keyframe  volume    accumulator
+		.by $0e		; Attack  keyframe  frequency interpolator
+		.by $10		; Attack  keyframe  feedback  interpolator
+		.by $18		; Decay   keyframe  frequency interpolator
+		.by $1a		; Decay   keyframe  feedback  interpolator
+		.by $22		; Sustain keyframe  frequency interpolator
+		.by $24		; Sustain keyframe  feedback  interpolator
+		.by $26		; Sustain keyframe  volume    interpolator
+		.by $2c		; Release keyframe  frequency interpolator
+		.by $2e		; Release keyframe  feedback  interpolator
+clear_voice_end
+
+
+* ----- HSFX flag sets ----- *
+
+ALL_ACCUM	.EQU	FREQ_ACCUM+SHIFT_ACCUM+FBACK_ACCUM+VOL_ACCUM
+INTERP		.EQU	FREQ_INTERP+FBACK_INTERP+VOL_INTERP
+
+voice0		; --- Voice 0 -----------------------------------------------
+		.wo HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-1}*2}
+attackframe_v0	.wo 0		; === Time to start attack
+		.wo ALL_ACCUM+INTERP
+attackfreq_v0	.wo 0		; Frequency accumulator
+		.wo 0		; Shifter accumulator
+		.wo 0		; Feedback accumulator
+		.wo 0		; Volume accumulator
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+decayframe_v0	.wo 1		; === Time to start decay
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+sustainframe_v0	.wo 1		; === Time to start sustain
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+releaseframe_v0	.wo 1		; === Time to start release
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+endframe_v0	.wo 1		; End release & end effect
+		.wo END_OF_EFFECT
+voice1		; --- Voice 1 -----------------------------------------------
+	#IF HMUSIC_CHANNELCOUNT > 1
+		.wo HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-2}*2}
+attackframe_v1	.wo 0		; === Time to start attack
+		.wo ALL_ACCUM+INTERP
+		.wo 0		; Frequency accumulator
+		.wo 0		; Shifter accumulator
+		.wo 0		; Feedback accumulator
+		.wo 0		; Volume accumulator
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+decayframe_v1	.wo 1		; === Time to start decay
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+sustainframe_v1	.wo 1		; === Time to start sustain
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+releaseframe_v1	.wo 1		; === Time to start release
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+endframe_v1	.wo 1		; End release & end effect
+		.wo END_OF_EFFECT
+	#ENDIF ; of #IF HMUSIC_CHANNELCOUNT > 1
+voice2		; --- Voice 2 -----------------------------------------------
+	#IF HMUSIC_CHANNELCOUNT > 2
+		.wo HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-3}*2}
+attackframe_v2	.wo 0		; === Time to start attack
+		.wo ALL_ACCUM+INTERP
+		.wo 0		; Frequency accumulator
+		.wo 0		; Shifter accumulator
+		.wo 0		; Feedback accumulator
+		.wo 0		; Volume accumulator
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+decayframe_v2	.wo 1		; === Time to start decay
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+sustainframe_v2	.wo 1		; === Time to start sustain
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+releaseframe_v2	.wo 1		; === Time to start release
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+endframe_v2	.wo 1		; End release & end effect
+		.wo END_OF_EFFECT
+	#ENDIF ; of #IF HMUSIC_CHANNELCOUNT > 2
+voice3		; --- Voice 3 -----------------------------------------------
+	#IF HMUSIC_CHANNELCOUNT > 3
+		.wo HMUSIC_DEFAULT_PRIORITY+{{HMUSIC_CHANNELCOUNT-4}*2}
+attackframe_v3	.wo 0		; === Time to start attack
+		.wo ALL_ACCUM+INTERP
+		.wo 0		; Frequency accumulator
+		.wo 0		; Shifter accumulator
+		.wo 0		; Feedback accumulator
+		.wo 0		; Volume accumulator
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+decayframe_v3	.wo 1		; === Time to start decay
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+sustainframe_v3	.wo 1		; === Time to start sustain
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+releaseframe_v3	.wo 1		; === Time to start release
+		.wo INTERP
+		.wo 0		; Frequency interpolation
+		.wo 0		; Feedback interpolation
+		.wo 0		; Volume interpolation
+endframe_v3	.wo 1		; End release & end effect
+		.wo END_OF_EFFECT
+	#ENDIF ; of #IF HMUSIC_CHANNELCOUNT > 3
+* NOTE:  The position of the above note arrays is very critical. Don't mess.
+* NOTE:  ====================================================================
+
+
+

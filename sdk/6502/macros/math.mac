@@ -1,0 +1,50 @@
+; DEC16 provides a way to decrement a 16-bit memory location.
+; This macro could cause a local label redefinition 
+	#MACRO	DEC16
+	LDA	?0
+	#IF	?0 < $0100
+	BNE	*+4
+	#ENDIF
+	#IF	?0 >= $0100
+	BNE	*+5
+	#ENDIF
+	DEC	?0+1
+	DEC	?0
+	#ENDMACRO
+
+
+; The NEG macro performs a 2's-complement negation of the accumulator
+	#MACRO	NEG
+	EOR	#$FF
+	INC
+	#ENDMACRO
+
+
+; The NEG8 macro does a 2's-complement negation of the specified memory
+; location
+	#MACRO	NEG8
+	LDA	?0
+	NEG
+	STA	?0
+	#ENDMACRO
+
+
+; The NEG16 macro does a 2's-complement negation of the 16-bit word 
+; at the specified memory location
+	#MACRO	NEG16
+	LDA	?0
+	EOR	#$FF
+	CLC
+	ADC	#1
+	STA	?0
+	LDA	?0+1
+	EOR	#$FF
+	ADC	#0
+	STA	?0+1
+	#ENDMACRO
+
+
+	.END
+
+
+

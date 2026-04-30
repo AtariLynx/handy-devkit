@@ -1,0 +1,70 @@
+; Monday 23-Apr-90 16:06:17
+* === hmusic.mac =============================================================
+*
+* Handy Music Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	----------------------------------------------
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+*  8 Jun 89	Greg Omi	Added MUTE macro
+* 18 Apr 89	-RJ		Changed ADDVOICE to STARTVOICE
+* 11 Apr 89	-RJ		Added all the other music macros; changed
+*				PLAYMUSIC to ADDMUSIC, as that's what it does;
+*				changed INITMUSIC to INITHMUSIC
+*  6 Apr 89	-RJ Mical-	Added STOPMUSIC macro
+* 13 Feb 89	RG Goudy	Created this file from hsfx.mac
+*
+* ===========================================================================
+
+
+
+ #MACRO	INITHMUSIC
+	JSR InitHMusic
+ #ENDMACRO
+
+
+ #MACRO	PLAYMUSIC
+	JSR PlayMusic
+ #ENDMACRO
+
+
+ #MACRO	ADDMUSIC
+	JSR AddMusic
+ #ENDMACRO
+
+
+ #MACRO	STARTVOICE
+	JSR StartVoice
+ #ENDMACRO
+
+
+ #MACRO	STOPMUSIC
+	JSR StopMusic
+ #ENDMACRO
+
+
+ #MACRO	STOPVOICE
+	JSR StopVoice
+ #ENDMACRO
+
+
+ #MACRO	SETUSER
+	LDA #<?0
+	LDX #>?0
+	JSR SetUser
+ #ENDMACRO
+
+
+ #MACRO	CLEARUSER
+	JSR ClearUser
+ #ENDMACRO
+
+
+ #MACRO	MUTE
+	JSR Mute
+ #ENDMACRO
+
+

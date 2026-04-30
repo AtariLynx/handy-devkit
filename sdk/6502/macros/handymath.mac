@@ -1,0 +1,45 @@
+
+* === handymath.mac =========================================================
+*
+* Handy Math Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1988, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 9-Feb-90	SHL		Removed Apple emulation compatibility
+*				Removed all references to HANDYMATH
+* 2 Jan 89	-RJ		Changed HANDYMATH so that it must be defined:
+*				0 = Handy hardware exists, so use it
+*				1 = Use Handy math software
+*				2 = Use math software with fast fat multiply
+* 30-Dec-88	=RJ Mical=	Changed define throughout file to test if
+*				HANDYMATH rather than HANDYIO to be defined
+*				to use Handy math hardware or fake software
+* Late 88	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+* The WAITMATH macro is used if you don't have anything else to do while
+* Suzy is executing your math.  You must wait for Suzy to finish before
+* reading the results, but you don't have to wait if you've got something
+* else to do in the meanwhile.
+	#MACRO WAITMATH
+??0	.= *
+	BIT SPRSYS
+	BMI ??0
+	#ENDM
+
+
+* If you are doing multiply-and-accumulate, you need to set to accumulator
+* to some known state.  If you want the accumulator set to zero, you can use
+* the CLEARACCUM macro.  This macro is good because it takes advantage of
+* the autoreset math register scheme when your code is running on Handy
+	#MACRO CLEARACCUM
+	STZ MATHK
+	STZ MATHM
+	#ENDM
+
+

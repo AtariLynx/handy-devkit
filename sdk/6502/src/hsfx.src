@@ -1,0 +1,911 @@
+; Tue Sep 18 17:43:53 1990
+* === hsfx.src ==============================================================
+*
+* Handy Sound Effects Driver  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	----------------------------------------------
+* 04-May-90	SHL		If not integrated, voice bias reset on stopped
+*				channel.  If integrating, voice bias ramped to
+*				zero.  No longer tries to play sounds if voice
+*				owned by someone else.
+* 19-Apr-90	SHL		AllocAudio and GrabAudio routines now assemble
+*				inly if GRABAUDIO_USER is set.
+*				General code tightening and cleanup.
+*				Moved top_of_loop0,1 variables to hsfx.var .
+*				Moved hsfx_temp to zero page.
+* 18-Apr-90	SHL		InitHSFX now zeroes all HSFX variables
+*				FreeAudio now zeroes bias on stopped channel
+* 01-Apr-90	SHL & G Colgate	Added USER_HSFX switch and call to user_hsfx
+* 26-Mar-90	SHL		Removed PHA, PHX instructions from hsxf_driver
+*				Changed driver exit to match new IRQ handler
+* 6 Oct 89	SHL		Modified driver to catch dropped frames
+*				Modified START_DISABLE and END_DISABLE macros
+*				to use the new flag audio_lockout
+* 14 Sep 89	SJ		Fix to register clear in StartHSFX
+* 5 Sept 89	SJ		Changed public calls to lock out just audio
+* 31 Aug 89	SJ		Changed code to use HSFX_CHANNELCOUNT et al.
+*				Made variables relocatable in HSFX.var
+*				User programs now must include HSFX.var also.
+*				Tightened up key frame loop in update_frame.
+* 30 Aug 89	Stephen Jungels	Clear launch_channel flag when killing a sound.
+*				Simplified channel killing code.
+*				Modified grunt main loops.
+*				Changed ResetHSFX to call FreeAudio.
+* 11 Aug 89	-RJ		Restore I flag at end of int. driver before
+*				clearing audio_interruptus
+* 1 June 89	-RJ		Added some pre-CES bullet-proofing to check
+*				channel number in FreeAudio and GrabAudio
+* 1 June 89	SHL		Moved hsfx_driver core to hsfx_driver_grunt,
+*				called by both hsfx_driver and hmusic_driver
+*				allowing SEPARATE_HMUSIC_HSFX to work
+* 31 May 89	SHL		Added the required 5th element to ChannelInUse
+* 13 May 89	-RJ		Added SEPARATE_HMUSIC_HSFX support
+* 11 May 89	-RJ		FrameClock and FramePreload are changed to
+*				AudioClock and AudioPreload.  These are now
+*				set using AUDIO_CLOCK_MASK and AUDIO_PRELOAD.
+*				Removed HFIX1 references.  Made InitHSFX
+*				always disable interrupts
+* 1 May 89	-RJ		Changed all IntTable references to sysIntTable
+*				which is defined now in the sys.mac file
+* 30 Apr 89	-RJ		Got rid of old CES_SLOWCLOCK stuff
+* 5 Apr 89	-RJ		Added audio_interruptus.  The hsfx driver
+*				interrupt code now clears interrupt disable
+*				as soon as its taken steps to prevent
+*				reentrancy, thereby allowing other more
+*				important interrupts to be processed.
+* 22 Mar 89	-RJ		Moved declaration of audio_ptr into this file.
+*				Changed order of steps in ResetHSFX.
+*				Added cancellation of launch_channel in Reset.
+*				Tightened code in calc_next_audio
+* 21 Mar 89	-RJ		Changed name of effect_in_use to ChannelInUse.
+*				By request, changed name of temp to hsfx_temp.
+*				Tightened up loop in ResetHSFX
+* 20 Mar 89	-RJ		Merged RG's changes into this file, added
+*				many comments, general cleanup
+* 19 Mar 89	-RJ		Added many calls to HFIX1 macros as needed
+* Feb 89	RG		Tightened code, folded music into HSFX
+* 4 Jan 89	=RJ Mical=	Stripped out sample program, changed defines
+*				to match harddefs.i
+*				Added AUDIO_TIMER definition and more
+* Late 88	RG Goudy	Created this file!
+*
+* ===========================================================================
+
+
+
+
+   #IFNDEF START_DISABLE
+
+AUDIO_DISABLE	.EQU	1
+; Define AUDIO_DISABLE to disable audio interrupts *only* in public audio
+; routines.  Undefine AUDIO_DISABLE to lock out *all* interrupts.
+
+	#MACRO START_DISABLE
+		#IFDEF AUDIO_DISABLE
+		 INC	audio_lockout
+		#ELSE
+		 PHP
+		 SEI
+		#ENDIF
+	#ENDM	; START_DISABLE
+
+	#MACRO END_DISABLE
+		#IFDEF AUDIO_DISABLE
+		 DEC	audio_lockout
+		#ELSE
+		 PLP
+		#ENDIF
+	#ENDM	; END_DISABLE
+
+
+   #ENDIF	; OF IFNDEF START_DISABLE
+
+
+
+		BEGIN_ZPAGE
+audio_ptr	.DS 2		; grab some zero page variables
+hsfx_temp	.DS 1
+		END_ZPAGE
+
+
+
+* If HMUSIC is out there and if the programmer hasn't asked for
+* SEPARATE_HMUSIC_HSFX then define hsfxSysCancel, which will turn HSFX into
+* little more than a subroutine call for HMUSIC
+	#IFDEF HANDYMUSIC
+	  #IFNDEF SEPARATE_HMUSIC_HSFX
+hsfxSysCancel	.EQU	1
+	  #ENDIF
+	#ENDIF
+
+
+
+InitHSFX
+* ===========================================================================
+* Sound Effects Driver Initialization
+* You should call this routine only once, during the initialization
+* portion of your code
+* Warning from RG:  if you muck with it and it doesn't work it's your fault
+* (yes, straight to bed with no dinner).
+*
+* If you are using the Handy music driver you are supposed to initialize
+* the audio system by calling InitMusic.  InitMusic calls InitHSFX, so you
+* aren't required to call both.
+
+
+ #IFNDEF hsfxSysCancel
+	 php
+	  sei
+
+	  lda #<hsfx_driver			; link HSFX in IRQ handler
+	  sta sysIntTable+{AUDIO_TIMER*2}
+	  lda #>hsfx_driver
+	  sta sysIntTable+{AUDIO_TIMER*2}+1
+ #ENDIF
+
+	  lda #AUDIO_CLOCK_MASK+ENABLE_INT+ENABLE_RELOAD+ENABLE_COUNT
+	  ldy #AUDIO_PRELOAD
+	  sta TIMER0+{AUDIO_TIMER*4}+TIM_CONTROLA
+	  sty TIMER0+{AUDIO_TIMER*4}+TIM_BACKUP
+
+ #IFNDEF hsfxSysCancel
+	 plp
+ #ENDIF
+
+* ... and intentionally fall into ResetHSFX
+
+
+
+ResetHSFX
+* ===========================================================================
+* This routine turns off the audio channels and clears the HSFX driver's
+* usage of all the channels.  You can call this routine
+* whenever you like, as often as you like.
+
+* Warning:  this code is fallen into from above
+
+	 php
+	  sei
+
+	  ldx #HSFXVarEnd-HSFXVarStart	; clear all HSFX variables
+.00	    stz HSFXVarStart-1,x
+	    dex
+	   bne .00
+
+	  ldx #HSFX_CHANNELCOUNT-1	; free each audio channel
+.10	    jsr FreeAudio
+	    dex
+	   bpl .10
+
+	 plp
+	rts
+
+
+StartHSFX
+* ===========================================================================
+* The StartHSFX routine is called to add a sound effect to the system.
+* Call with the address of your HSFX table in A,X (low,high) and
+* with the priority of this sound effect in Y.
+*
+* If your sound effect is successfully added, carry is clear on return and X
+* has the audio channel number of your sound effect.  If your sound effect
+* couldn't be added, carry is set on return and X will have the value 4.
+* Channel 4 is a mock HSFX channel, the priority of which (found in
+* ChannelInUse) will always be zero and therefore will never match the
+* priority of a sound effect submitted to StartHSFX.  This allows you the
+* convenience of being able to check at a later time whether or not your
+* sound effect is still active without requiring the overhead of checking
+* whether the call to StartHSFX succeeded or failed in the first place.
+*
+* On return:
+*    carry clear = success
+*      carry set = failure
+*              X = channel number (0 - 3) of sound effect if success, else 4
+
+
+	START_DISABLE	; disable sound IRQs
+
+	sta audio_ptr		; hsfx table address lsb
+	stx audio_ptr+1		; hsfx table address msb
+
+	jsr find_lesser_channel
+	bcs .00
+
+	ldx #HSFX_CHANNELCOUNT	; Return mock channel number
+
+	END_DISABLE
+
+	sec			; Return result:  no channel available
+	rts
+
+
+.00	sta ChannelInUse,x	; Store priority of this channel
+	lda audio_ptr
+	sta hsfx_basel,x
+	lda audio_ptr+1
+	sta hsfx_baseh,x
+
+	txa			; Clear accumulators & interpolators
+	clc
+	adc #HSFX_CHANNELCOUNT*{HSFX_REGSIZE*HSFX_REGCOUNT-1}
+	sec
+.11	  tax
+	  stz freql,x
+	  sbc #HSFX_CHANNELCOUNT
+	 bcs .11		; X comes out of loop with correct index
+
+	jsr update_frame	; read in first key frame
+	jsr calc_next_audio	; set up for first hardware load
+
+	lda #$80		; set signal to start sound effect
+	sta launch_channel,x
+
+	END_DISABLE
+
+	clc			; tell caller that channel was gotten
+	rts
+
+
+
+StopHSFX
+* ===========================================================================
+* This routine is called to remove a sound effect from the system.
+* Call with the priority of the sound effect to stop in Y
+*
+* On return:
+*    A, X and Y are trashed
+*    carry clear = a sound effect with this priority was found and stopped
+*    carry set = no sound effect with this priority was found
+
+
+	START_DISABLE		; kill sound IRQs
+
+	tya
+	ldx #HSFX_CHANNELCOUNT
+
+.11	  dex
+	  bmi .20
+	  cmp ChannelInUse,x
+	 bne .11
+
+	jsr freeChannelX	 ; found channel with desired priority, free it
+
+	END_DISABLE
+	clc
+	rts
+
+.20	END_DISABLE
+	sec
+	rts
+
+
+
+FreeAudio
+* ===========================================================================
+* This routine is called to free an audio channel that was allocated
+* using AllocAudio or GrabAudio.  It's used also by the HMUSIC driver to
+* free up the channel at the end of a note.
+*
+* Call with the channel number that you want to free in X.
+*
+* On return:
+*    carry wil be clear, which equals success
+
+ #IFDEF SOUND_DEBUG
+	cpx #HSFX_CHANNELCOUNT	; trap illegal channel
+	bcc .00
+	HBRK
+	BRK
+ #ENDIF
+
+
+	START_DISABLE	; kill sound IRQs
+
+	jsr freeChannelX
+
+	END_DISABLE
+	clc
+	rts
+
+
+
+ #IFDEF GRABAUDIO_USER
+
+AllocAudio
+* ===========================================================================
+* This routine is called to attempt to allocate an audio channel away from
+* HSFX.  If you successfully allocate a channel, HSFX won't touch it at all
+* until you return the channel using FreeAudio, or until you call INITHSFX,
+* INITHMUSIC or RESETHSFX
+*
+* To permanently allocate a channel, 
+*
+* Call with the priority of your desire for an audio channel in Y
+*
+* On return:
+*    carry clear = success
+*      carry set = failure
+*              X = Number of your new audio channel if success
+
+	START_DISABLE		; kill sound IRQs
+
+	jsr find_lesser_channel
+	bcs grabChannelX	; Branch if channel available
+
+	END_DISABLE
+	sec			; Signal no channel is available
+	rts
+
+
+
+GrabAudio
+* ===========================================================================
+* This routine is called to grab an audio channel for your own use without
+* any lip from the HSFX driver.  When ya' just want to grab a channel and
+* you don't want no hassles, grab it with GrabAudio.
+*
+* Call with the number of the audio channel you want to grab in X
+*
+* After you've grabbed a channel, it remains unavailable to HSFX until you
+* return it with a call to FreeAudio, or until you call INITHSFX, INITHMUSIC
+* or RESETHSFX
+
+	START_DISABLE		; kill sound IRQs
+
+grabChannelX
+	lda #HSFX_NOCHANNEL	; mark channel as unavailable
+	jsr killChannelX
+
+	END_DISABLE
+	clc
+	rts
+
+ #ENDIF ; of #IFDEF GRABAUDIO_USER
+
+
+
+* find_lesser_channel and freeChannelX don't affect the state of the IRQ flags
+
+
+find_lesser_channel
+* ===========================================================================
+* The find_lesser_channel routine feels through the priorities of the audio
+* channels, looking for one that's the most less than or equal to the
+* priority of interest.
+*
+* On entry:  the priority to beat is in Y
+* On exit:  The lowest priority channel number is returned in X.  If priority
+*	of the channel is less than or equal to request	then carry is set
+
+ #IF HSFX_CHANNELCOUNT>1
+
+	phy
+
+	ldx #HSFX_CHANNELCOUNT-1
+	ldy #HSFX_CHANNELCOUNT-2
+.40	  lda ChannelInUse,x
+	  cmp ChannelInUse,y
+	  blt .41		; Branch if x-priority is less than y-priority
+	  tya		; else copy y to x
+	  tax
+.41	  dey
+	 bpl .40
+
+	pla	
+
+ #ELSE
+
+	tya
+	ldx #HSFX_CHANNELCOUNT-1
+
+ #ENDIF
+
+	cmp ChannelInUse,x	; compare with lowest priority channel
+
+	rts
+
+
+
+freeChannelX
+* ===========================================================================
+* Here, X has the index of the channel to be freed
+	lda #0
+
+killChannelX
+	sta ChannelInUse,x		; either free or grab channel
+
+	stz launch_channel,x		; make sure we zero launch flag also
+	ldy audio_offsets,x
+	lda AUDIO0+AUD_CONTROL,y
+	and #ENABLE_INTEGRATE
+	sta AUDIO0+AUD_CONTROL,y	; kill channel
+	bne .90
+	sta AUDIO0+AUD_OUTPUT,y	; reset volume (DC bias) if not integrated
+.90	rts
+
+
+
+
+
+
+
+* ===========================================================================
+* ====                    ===================================================
+* ====   Interrupt Code   ===================================================
+* ====                    ===================================================
+* ===========================================================================
+
+
+ #IFNDEF hsfxSysCancel
+
+hsfx_driver
+* ===========================================================================
+* Here's the entry point HSFX interrupt code
+* Note that if hsfxSysCancel is defined this code doesn't exist
+
+	;-- Test if this is an hsfx interrupt re-entering
+	;-- If audio_interruptus is zero, this is a top-level entry
+	;-- into the interrupt code so it's safe to proceed.  But
+	;-- if audio_interruptus isn't zero we're re-entering ... we
+	;-- got so pushed so deep in the queue that another audio
+	;-- interrupt occurred!  It's not safe to re-enter, so split
+	;-- (causing the audio to skip a beat, it's true).
+	lda audio_lockout	; are we being locked out?
+	bne .12
+	lda audio_interruptus	; Were we here before
+	beq .10			; Branch if not
+.12	inc audio_dropout	; count dropped frames
+	bra .90			; branch to exit
+
+.10	inc audio_interruptus	; Mark that we are here
+	inc audio_dropout	; record frame we're doing
+	cli			; and let other interrupts run
+
+	 phy
+.11	    jsr hsfx_driver_grunt
+	    dec audio_dropout	; mark that we've played a frame
+	   bne .11		; loop back for dropped frames
+	 ply
+
+	stz audio_interruptus	; reset flag so we know it's OK
+
+.90
+	plx
+	pla
+	rti
+
+ #ENDIF ; of IFNDEF hsfxSysCancel
+
+
+
+
+
+hsfx_driver_grunt
+* ===========================================================================
+* Here's the actual HSFX interrupt code
+* The audio driver turns itself into "low-priority" interrupt code by
+* enabling interrupts as soon as it has protected itself against being
+* reentered.  This will allow more important (especially time-critical)
+* interrupt routines to wrest control away from audio whenever necessary.
+
+ #IFDEF USER_HSFX
+	jsr user_hsfx
+ #ENDIF
+
+* Lay our hands on the hardware of each active channel
+* (although note that this loop won't actually start the audio timer
+* for the channel if the timer isn't already running.  This is handled
+* in the launch_channel loop below).
+
+	ldx #HSFX_CHANNELCOUNT-1
+
+.00	  ldy audio_offsets,x
+	  lda ChannelInUse,x	; Is this an active channel?
+	  bne .02
+	  lda AUDIO0+AUD_OUTPUT,y	; not active, ramp volume to zero
+	  beq .01
+	  bpl .03
+	  inc a
+	  inc a
+.03	  dec a
+	  sta AUDIO0+AUD_OUTPUT,y
+	  bra .01
+
+.02	  cmp #HSFX_NOCHANNEL	; does someone else own this channel?
+	  beq .01
+
+.10	  lda volumeh,x
+	  sta AUDIO0+AUD_VOLCNTRL,y	; Volume
+
+	  lda preload_temp,x
+	  sta AUDIO0+AUD_BACKUP,y	; Frequency lsb
+
+	  lda data_temp,x
+	  sta AUDIO0+AUD_FEEDBACK,y	; Update feedback
+
+	  lda flagsl,x
+	  and #SHIFT_ALWAYS		; Store shifter value always?
+	  bne .20			; Branch if yes
+	  asl shift_flag,x		; Store new shifter this time only?
+	  bcc .22			; Branch if no
+
+.20	  lda AUDIO0+AUD_OTHER,y	; Do masking as needed
+	  and #$f
+	  ora shift_temp,x
+	  sta AUDIO0+AUD_OTHER,y
+
+	  lda shiftl,x
+	  sta AUDIO0+AUD_SHIFT,y
+
+.22	  lda AUDIO0+AUD_CONTROL,y	; patch in new control values
+	  and #ENABLE_COUNT+ENABLE_RELOAD+RESET_DONE
+	  ora clock_temp,x
+	  sta AUDIO0+AUD_CONTROL,y
+
+.01	  dex
+	 bpl .00
+
+;	jmp launch_channels		; fall through
+
+
+* If two notes start with the same frequency they should be started
+* at very close to the same time to prevent them from being very close to
+* 180 degrees out of phase with each other.  Being out of phase would cause
+* them to cancel each other out; we know this from experience!  So all new
+* notes should be launched as close together as possible, thereby helping
+* avoid the out-of-phase cancellation problem.  This loop accomplishes that,
+* and the overhead of the additional loop is well worth it.
+
+launch_channels
+	sei
+	ldx #HSFX_CHANNELCOUNT-1
+
+launch_next_channel
+.00	  lda launch_channel,x		; Launch this channel?
+	  beq .01			; Branch if not
+	  stz launch_channel,x		; finished launching
+
+	  ldy audio_offsets,x
+	  lda AUDIO0+AUD_BACKUP,y	; Frequency lsb
+	  sta AUDIO0+AUD_COUNTER,y	; Copy prevents phase errors
+
+	  lda AUDIO0+AUD_CONTROL,y	; Start audio timer
+	  ora #ENABLE_RELOAD+ENABLE_COUNT
+	  sta AUDIO0+AUD_CONTROL,y
+
+.01	  dex
+	 bpl .00
+
+* Advance the HSFX values of each active channel
+
+advance_channels
+	cli
+	ldx #HSFX_CHANNELCOUNT-1
+
+.00	  lda ChannelInUse,x	; Is this an active channel?
+	  beq .01		; skip if not
+	  cmp #HSFX_NOCHANNEL	; do we own this channel?
+	  beq .01
+	  lda current_framel,x	; Do we match next key frame entry?
+	  cmp next_keyframel,x
+	  bne .10		; ... no, do interpolation only
+	  lda current_frameh,x
+	  cmp next_keyframeh,x
+	  bne .10		; ... no, do interpolation only
+	  jsr update_frame	; It's time to do something different
+	  bra .20		; First time, don't interpolate
+
+* Add the interpolators to the accumulators
+
+.10	   phx
+
+.11	    clc
+	    lda freq_interpl,x
+	    adc freql,x
+	    sta freql,x
+	    lda freq_interph,x
+	    adc freqh,x
+	    sta freqh,x
+
+	    ; Bump x to next accumulator-interpolator pair
+
+ #IF HSFX_REGSIZE*HSFX_CHANNELCOUNT > 4
+	    txa
+	    clc
+	    adc #HSFX_REGSIZE*HSFX_CHANNELCOUNT
+	    tax
+ #ELSE
+  #REP HSFX_REGSIZE*HSFX_CHANNELCOUNT
+	    inx
+  #ENDM
+ #ENDIF
+
+; Has index overshot into accumulator-interpolator pair n+1?
+	    cpx #HSFX_CHANNELCOUNT*HSFX_REGSIZE*HSFX_ACCUMCOUNT
+	    bcc .11		; Branch if not
+	   plx
+
+.20	  jsr calc_next_audio	; Prepare data for hardware registers
+
+.01	  dex
+	 bpl .00
+
+	rts
+
+
+
+
+update_frame
+* ===========================================================================
+* Updates an HSFX channel's arrays based on the keyframe frame entry
+* pointed to by hsfx_basel,h.
+*
+* On entry:
+*   x = HSFX channel number
+*   hsfx_basel,x points to low flag byte of current frame data
+*
+* On exit:
+*   accumulators & interpolators pre-loaded
+*   next_keyframel,h set to frame number for next keyframe
+*   hsfx_basel,x points to low flag byte of next frame data
+*   This routine trashes A and Y, leaves X intact
+
+	lda hsfx_basel,x	; Set up indirect pointer
+	sta audio_ptr
+	lda hsfx_baseh,x
+	sta audio_ptr+1
+loop_frame
+	  ldy #1
+
+	  lda (audio_ptr)	; this is where current_frame gets initialized
+	  sta current_framel,x	; when a sound is started.
+	  lda (audio_ptr),y
+	  sta current_frameh,x
+
+	  iny
+	  lda (audio_ptr),y	; Find out what to do this time
+	  sta flagsl,x
+	  iny
+	  lda (audio_ptr),y
+	  sta flagsh,x
+	  iny
+
+	  asl top_of_loop0	; Returning to the top of a loop?
+	  bcs stuff0		; Yes, don't reload count byte
+	  lda flagsh,x
+	  and #>NEXT0		; At the bottom of an inner loop?
+	  beq next0_done	; Branch if not
+	  lda loop_count0,x	; Infinite loop?
+	  beq infinite0		; Yes, don't count
+	  dec loop_count0,x	; Not infinite, so are we done?
+	  beq next0_done	; Branch if yes.
+infinite0
+	  lda loop_adrl0,x	; Reload pointer to top of loop
+	  sta audio_ptr
+	  lda loop_adrh0,x
+	  sta audio_ptr+1
+	  lda #$80		; Set 'skip loading count' flag
+	  sta top_of_loop0
+	 bra loop_frame		; Go do top of loop
+
+
+next0_done
+
+	  lda flagsh,x
+	  and #>LOOP0		; Starting an inner loop?
+	  beq no_loop0		; Branch if not
+	  lda audio_ptr		; else save this table pointer value
+	  sta loop_adrl0,x
+	  lda audio_ptr+1
+	  sta loop_adrh0,x
+	  lda (audio_ptr),y	; Get # of loops to do
+	  sta loop_count0,x
+stuff0
+	  iny
+no_loop0
+
+	  asl top_of_loop1	; Returning to the top of a loop?
+	  bcs stuff1		; Yes, don't reload count byte
+	  lda flagsh,x
+	  and #>NEXT1		; At the bottom of an outer loop?
+	  beq next1_done	; Branch if not
+	  lda loop_count1,x	; Infinite loop?
+	  beq infinite1		; Yes, so don't count
+	  dec loop_count1,x	; Not infinite, so are we done?
+	  beq next1_done	; Branch if yes
+infinite1
+	  lda loop_adrl1,x	; Reload pointer to top of loop
+	  sta audio_ptr
+	  lda loop_adrh1,x
+	  sta audio_ptr+1
+	  lda #$80		; Set 'skip loading count' flag
+	  sta top_of_loop1
+	 jmp loop_frame		; Go do top of loop
+
+
+next1_done
+	lda flagsh,x
+	and #>LOOP1		; Are we starting an outer loop?
+	beq no_loop1		; Branch if not
+	lda audio_ptr		; Save this table pointer value
+	sta loop_adrl1,x
+	lda audio_ptr+1
+	sta loop_adrh1,x
+	lda (audio_ptr),y	; Get # of loops to do
+	sta loop_count1,x
+stuff1
+	iny
+
+no_loop1		; now load appropriate accumulator/interpolator values
+
+			; The following piece of code takes the center 8 bits
+			; from the middle of flagsl,h and puts them in order
+			; into hsfx_temp
+	lda flagsl,x	; Get a temporary copy of this channel's flags
+	asl a
+	eor flagsh,x	; smush together upper flagsl bits + lower flagsh bits
+	and #$e0
+	eor flagsh,x
+	rol a		; bring flagsh bits to the top
+	rol a
+	rol a
+	rol a
+	sta hsfx_temp
+
+	 phx		; Stash the channel number
+
+			; NOTE: the BPL at top of the loop depends on the
+			; ROL instruction above, and the ASL below
+.22	    bpl .33		; copy key frame data for each flag bit set
+	    lda (audio_ptr),y	; get new value
+	    sta freql,x		; this presumes specific array order
+	    iny
+	    lda (audio_ptr),y
+	    sta freqh,x
+	    iny
+.33
+ #IF HSFX_REGSIZE*HSFX_CHANNELCOUNT > 4
+	    clc
+	    txa	 ; Offset X to next accumulator/interpolator for this channel
+	    adc #HSFX_REGSIZE*HSFX_CHANNELCOUNT
+	    tax
+ #ELSE
+  #REP HSFX_REGSIZE*HSFX_CHANNELCOUNT
+	    inx
+  #ENDM
+ #ENDIF
+	    asl hsfx_temp	; stop when no more flags are set
+	   bne .22
+
+	 plx	; Restore the channel number
+
+	lda flagsh,x
+	and #>SHIFT_ACCUM	; New absolute_shifter?
+	beq .55		;no
+	lda #$80
+.55	sta shift_flag,x	; Set 'store once' flag
+
+	lda flagsl,x
+	and #INTEGRATE		; This is a 'force on/off' flag
+	asl a			; Move into pos for hardware register
+	asl a
+	sta integrate,x
+
+	lda flagsl,x
+	and #END_OF_EFFECT	; Are we at end of this effect?
+	bne end_of_effect
+
+	; Advance hsfx_basel,h to point to next key frame entry
+	tya
+	clc
+	adc audio_ptr
+	sta hsfx_basel,x
+	lda #0
+	adc audio_ptr+1
+	sta hsfx_baseh,x
+
+	lda (audio_ptr),y	;get next key frames' frame #
+	sta next_keyframel,x
+	iny
+	lda (audio_ptr),y
+	sta next_keyframeh,x
+
+	rts			;end of key frame entry
+
+
+end_of_effect
+	jmp freeChannelX
+
+
+
+
+calc_next_audio
+* ===========================================================================
+* This routuine converts the channel's accumulators into values
+* designed for easy hardware loading.  This is done before the start of the
+* audio frame, so that at the start of the audio frame all appropriate
+* values can be picked up and jammed into the audio registers with minimum
+* delay, thereby creating purer sounds.
+*
+* This routine trashes A and Y, leaves X intact
+
+
+* Select the clock by normalizing the frequency accumulator
+* (the algorithm and proof is actually a rather hairy one)
+	ldy #7
+	lda freql,x
+	sta hsfx_temp
+	lda freqh,x
+
+.00	  asl hsfx_temp
+	  rol a
+	  dey
+	  bcs .01
+	 bne .00
+
+.01	ror a
+
+end_freq
+	sta preload_temp,x
+	tya
+	sta clock_temp,x
+
+
+* Preset the 12-bit shifter values
+	lda shifth,x
+	asl a
+	asl a
+	asl a
+	asl a
+	sta shift_temp,x
+
+* Preset the lower 8 feedback enables
+	lda feedbackl,x
+	asl
+	sta hsfx_temp
+	lda feedbackh,x
+	rol a
+	asl hsfx_temp
+	rol a
+	asl hsfx_temp
+	rol a
+	asl hsfx_temp
+	rol a
+	cmp #$80		; sec if high bit set
+	eor feedbackh,x		; merge in top two bits of feedbackh
+	and #$3f
+	eor feedbackh,x
+	sta data_temp,x
+
+* Grab the other feedback enable, or'ing it into the other register
+	lda #0
+	ror a			; bring carry into top bit
+	ora integrate,x		; OR with integration
+	ora clock_temp,x	; OR in with clock
+	sta clock_temp,x
+
+
+* Increment this sound effect's current frame counter
+	inc current_framel,x
+	bne .11
+	inc current_frameh,x
+
+.11	rts
+
+
+
+
+
+* === ======================================================================
+* ===               ========================================================
+* ===      Data     ========================================================
+* ===               ========================================================
+* === ======================================================================
+
+
+audio_offsets	.by $00,$08,$10,$18 ; Offsets into the hardware audio timers
+

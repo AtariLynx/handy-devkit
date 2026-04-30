@@ -1,0 +1,510 @@
+; Wednesday 18-Apr-90 08:45:32
+* === cart.src ==============================================================
+* 
+* Game Cartridge I/O Routines  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+* 
+* Date		Name		Description
+* ---------	-------------	---------------------------------------------
+* 11-Apr-90	SHL		Code optimized for size and speed
+*				Registers for OpenFile0 and SetCartAddress
+*				arguments changed: A = cartridge page,
+*				X,Y = byte offset into page
+*				SetCartPage now takes argument in A reg
+*				GetDirAddress routine rewritten, returns
+*				arguments as expected for OPENFILE routine
+*				GetDirAddressFast routine removed
+*
+* 26-Feb-90	SHL		Removed all references to WRITECART_USER
+*				Minor code tightening
+* 14-Feb-90	SHL		Fixed a horrible error that turns off carts
+*				during file reads that cross page boundaries
+* 7-Feb-90	SHL		Minor math touch-up work (slightly sped up)
+* 7-Feb-90	SHL		Fixed bug in math usage in GetDirAddressFast
+* 1 June 89	-RJ		Vectored RESTORE_CART usage to a subroutine
+* 15 May 89	-RJ		Made SetCartOffset use of RCART_1 into RCART_0
+* 20 Apr 89	=RJ Mical=	Created this file!
+* 
+* ===========================================================================
+
+
+
+CartOffsetLow	.DS	1
+ #IF ROMPAGESIZE>256
+CartOffsetHigh	.DS	1
+ #ENDIF
+CartPage	.DS	1
+CartIOCount	.DS	2
+	#IFNDEF	ROM_NODIR
+CartDirectory	.DS	ROMDIR_ENTRY_SIZE
+	#ENDIF
+
+
+
+	#IFNDEF	ROM_NODIR
+
+OpenFile0
+* ***************************************************************************
+* OpenFile0 "opens" a file by reading its directory entry into the 
+* CartDirectory buffer and then setting the hardware ready to read the file's
+* first data byte.  On entry, the cartridge address of the directory entry 
+* is specified with the page in X and the offset in A,Y (low,high).  
+* 
+* ON ENTRY:
+*     - A has the cartridge page of the file's directory entry
+*     - X,Y (low,high) has the offset of the file's directory entry
+* 
+* ON EXIT:
+*     - A, X and Y are trashed
+*     - CartPage and CartOffsetLow,High are set
+*     - CartDirectory contains the a copy of the file's entry
+*     - The cart hardware is ready to read the first byte of the file's data
+
+		;------	Set up address of the directory specified by the args
+		JSR SetCartAddress
+
+		;------	Read the directory
+		LDA #<{ROMDIR_ENTRY_SIZE+1}
+		STA CartIOCount
+		LDA #>{ROMDIR_ENTRY_SIZE+$100}
+		STA CartIOCount+1
+		LDA #<CartDirectory
+		STA sysptr
+		LDA #>CartDirectory
+		STA sysptr+1
+		JSR readCart0Grunt
+
+		;------	Set up to read the first byte of the file
+		LDA CartDirectory+ROMDIR_PAGE
+		LDX CartDirectory+ROMDIR_OFFSET
+ #IF ROMPAGESIZE>256
+		LDY CartDirectory+ROMDIR_OFFSET+1
+ #ENDIF
+
+* ... and fall into SetCartAddress
+
+	#ENDIF	; of #IFNDEF ROM_NODIR
+
+
+
+SetCartAddress
+* ***************************************************************************
+* This routine sets the cartridge ports to be ready to read or write the 
+* byte addressed by the page in X and the offset in A,Y (low,high).  
+* 
+* WARNING:  this routine is fallen into from above.
+* 
+* ON ENTRY:
+*     - X has the page of the cartridge address
+*     - A,Y (low,high) has the offset of the address
+* 
+* ON EXIT:
+*     - A, X and Y are trashed
+*     - CartPage and CartOffsetLow,High are set
+*     - The cart hardware is ready to read the first byte of the file's data
+
+		STA CartPage	; Save the cartridge 1 values
+		STX CartOffsetLow
+ #IF ROMPAGESIZE>256
+		STY CartOffsetHigh
+ #ENDIF
+
+		JSR SetCartPage
+
+* ... and fall into SetCartOffset to advance the cartridge address to 
+* the desired offset
+
+
+
+SetCartOffset
+* ***************************************************************************
+* This routine reads the cartridge (using port 0) until the cart address is
+* advanced to the byte described by CartOffsetLow,High.  Presumes that cart
+* is currently at offset 0.  
+* 
+* NOTE:  this code fallen into from above
+* 
+* ON ENTRY:
+*     - CartOffsetLow,High has the offset
+*     - Cart hardware is set to read byte 0 of the page
+* 
+* ON EXIT:
+*     - The cart hardware is advanced to the specified offset
+
+	ldy CartOffsetHigh	; get desired offset
+	ldx CartOffsetLow
+	iny			; increment for zero checking
+	inx
+	bra .10
+
+.20	    lda RCART_0		; count off bytes to advance cart address
+.10	    dex
+	   bne .20
+.30	  dey
+	 bne .20
+
+;	jmp RestoreReturn	; fall through
+
+RestoreReturn
+	RESTORE_CART
+	rts
+
+
+
+	#IFNDEF	ROM_NODIR
+
+ReadFile0
+* ***************************************************************************
+* This routine will read an entire game cartridge file into RAM.  Presumes 
+* that the cartridge 0 port is all set up to start reading.  Also presumes
+* that sysptr points to the directory entry of the file to be loaded, that the
+* CartDirectory buffer is filled out, and that CartPage and 
+* CartOffsetLow,High reflect the state of port 0.  
+* 
+* ON ENTRY:
+*    - If you have specified that the file directory has a ROMDIR_DEST field 
+*      which specifies that the directory has a RAM destination field:
+*         If the A register is non-zero, X,Y (low,high) is presumed to have
+*         the RAM destination for the file; if A is zero, then the RAM 
+*         destination is taken from the directory entry
+*    - If you have not specified that the file directory has a ROMDIR_DEST 
+*      field you must specify RAM destination of the file:
+*         X,Y (low,high) has the RAM destination for the file
+*    - The cartridge 0 port is all set up to read the first byte of the file
+* 
+* ON EXIT:
+*    - CartPage and CartOffsetLow,High are advanced to the byte beyond 
+*      the last byte read
+*    - X,Y (low,high) has RAM address of the byte beyond the last written
+
+
+;??? For now, presume that all data will be coming from the CartDirectory 
+;??? entry.  Later, it will come from either there or a RAM-based directory 
+;??? list if the programmer is willing to burn the bytes
+
+	#IFDEF	ROMDIR_DEST
+	cmp #1
+	bcs .30
+	ldx CartDirectory+ROMDIR_DEST	; get RAM destination from directory
+	ldy CartDirectory+ROMDIR_DEST+1
+	#ENDIF
+
+.30	lda CartDirectory+ROMDIR_SIZE+1	; set up count of bytes to read
+	ina
+	sta CartIOCount+1
+	lda CartDirectory+ROMDIR_SIZE
+	ina
+	sta CartIOCount
+
+	STX sysptr		; X,Y has the RAM destination pointer
+	STY sysptr+1
+
+;	jmp readCart0Grunt	; fall through
+
+
+	#ENDIF	; of #IFNDEF ROM_NODIR
+
+
+
+readCart0Grunt
+* **************************************************************************
+* Grunt routine used by several cart-reading routines, after the details 
+* have been tended to and everything is ready for the read.  
+* 
+* ON ENTRY:
+*    - CartIOCount is initialized to number of bytes to be read, with each
+*      byte incremented once (for instance: to read $0123 bytes set
+*      CartIOCount to $0224, to read $04ff bytes set CartIOCount to $0500)
+*    - sysptr points to buffer for incoming data
+*    - CartOffsetLow,High and CartPage to have valid numbers
+* 
+* ON EXIT:
+*    - CartPage and CartOffsetLow,High are advanced to the byte beyond 
+*      the last byte read
+*    - X,Y (low,high) have RAM address of the byte beyond the last written
+
+	SET_TO_READ_CART
+
+	ldx CartOffsetLow	; ROMPAGESIZE is assumed to be multiple of 256
+ #IF ROMPAGESIZE>256
+	sec			; set Y to complement of CartOffsetHigh
+	lda CartOffsetHigh	;  to facilitate bounds checking
+	sbc #>ROMPAGESIZE
+	tay
+ #ENDIF
+
+.30	      dec CartIOCount	; count down bytes to read
+	      beq .31
+.32	      LDA RCART_0	; read and store byte
+	      STA (sysptr)
+	      inc sysptr
+	      beq .44
+
+.33	      inx		; bump the cart page counters
+	     BNE .30
+ #IF ROMPAGESIZE>256
+	    iny
+	   BNE .30
+ #ENDIF
+
+	  inc CartPage		; get next page from cartridge
+	  lda CartPage
+	  JSR SetCartPage
+
+	  ldx #<{-ROMPAGESIZE}	; set count to read whole page
+ #IF ROMPAGESIZE>256
+	  ldy #>{-ROMPAGESIZE}
+ #ENDIF
+	 BRA .30
+
+.44	      INC sysptr+1	; not done frequently so pulled out of loop
+	      bra .33
+
+
+.31	      dec CartIOCount+1	; check to see if load is finished
+	      bne .32		; if not, get back in there
+
+.80	stx CartOffsetLow	; ROMPAGESIZE is assumed to be multiple of 256
+ #IF ROMPAGESIZE>256
+	clc			; restore true offset value
+	tya
+	ADC #>ROMPAGESIZE
+	STA CartOffsetHigh
+ #ENDIF
+
+	ldx sysptr
+	ldy sysptr+1
+
+	jmp RestoreReturn	; only affects A register
+
+
+
+* ***************************************************************************
+* SetCartPage strobes the cartridge page number in A into the cart shifter
+* The result of this also leaves the counter reset to 0
+*
+* On return, A, X and Y are trashed, and ROM power is enabled
+
+SetCartPage
+	sta .ff
+
+	lda IODAT_RAM
+	ora #RESTLESS+CART_ADDR_DATA
+	tay
+	and #~CART_ADDR_DATA
+
+	sec
+	bra .2
+.0	  bcc .1
+	  sty IODAT	; set CART_ADDR_DATA to clock in 1 bit
+	  clc
+.1	  inx		; ldx #3, adds in CART_ADDR_STROBE
+	  stx SYSCTL1
+.2	  ldx #POWERON
+	  stx SYSCTL1
+	  rol .ff
+	  sta IODAT	; reset CART_ADDR_DATA to clock 0 bit and power ROM
+	 bne .0
+
+	rts
+
+.ff	.BY 0
+
+
+
+
+;	#IFDEF	GETDIR_USER
+;
+;GetDirAddress
+;* ***************************************************************************
+;
+;		;------	Get copy of file number
+;		TAY
+;		INY	; Increment it so we can count down to zero
+;
+;		;------	Init the result fields to the file 0 entry
+;		LDX	#ROMDIR_FILE0_PAGE	; X will keep the page
+;		LDA	#<ROMDIR_FILE0_OFFSET
+;		STA	.FE
+;		LDA	#>ROMDIR_FILE0_OFFSET
+;		STA	.FF
+;
+;.10		;------	Loop until file number is reduced to zero
+;		DEY
+;		BEQ	.20
+;
+;		;------	Add the size of an entry to the current cart address
+;		LDA	#ROMDIR_ENTRY_SIZE
+;		CLC
+;		ADC	.FE
+;		STA	.FE
+;	bcc .11
+;	inc .ff
+;;		LDA	#0
+;;		ADC	.FF
+;;		STA	.FF
+;
+;		;------	Compare the current offset with the largest 
+;		;------	allowable offset
+;.11		LDA	#<ROMPAGESIZE-1
+;		CMP	.FE
+;		LDA	#>ROMPAGESIZE-1
+;		SBC	.FF
+;		BCS	.10		; Branch if offset <= largest allowed
+;
+;		;------	Offset too big.  Back offset down by one page, and 
+;		;------	bump page
+;		LDA	.FE
+;		SEC
+;		SBC	#<ROMPAGESIZE
+;		STA	.FE
+;		LDA	.FF
+;		SBC	#>ROMPAGESIZE
+;		STA	.FF
+;		INX
+;		BRA	.10		; Go do it again
+;
+;.20		;------	Return with the registers containing the cart address
+;		LDA	.FE
+;		LDY	.FF
+;		RTS
+;
+;.FE		.DS	1
+;.FF		.DS	1
+;
+;	#ENDIF	; of #IFDEF GETDIR_USER
+;
+;
+;	#IFDEF	GETDIRFAST_USER
+;
+;GetDirAddressFast
+;* ***************************************************************************
+;
+;		;------	Create the offset from the start of the directory to 
+;		;------	this directory entry
+;		STA MATHD
+;		STZ MATHC
+;		LDA #ROMDIR_ENTRY_SIZE
+;		STA MATHB
+;		STZ MATHA	; MULTIPLY
+;
+;		;------	Create the page of this entry by adding the size of the
+;		;------	ROM header to the directory entry offset and then 
+;		;------	dividing this by the size of a page
+;		LDA	#<ROMPAGESIZE
+;		WAITMATH
+;		STA	MATHP
+;		LDA	#>ROMPAGESIZE
+;		STA	MATHN
+;		LDA	#<ROM_HEADER_SIZE
+;		CLC
+;		ADC	MATHH
+;		TAX
+;		LDA	#>ROM_HEADER_SIZE
+;		ADC	MATHG
+;		STX	MATHH
+;		STA	MATHG
+;		LDA	#0
+;		ADC	MATHF
+;		STA	MATHF
+;		STZ	MATHE	; DIVIDE
+;
+;		;------	Create the byte offset of the entry by subtracting the 
+;		;------	start byte offset from the real byte offset.  
+;		;------	Wouldn't have to do this if division remainder worked
+;		WAITMATH
+;		lda	MATHH
+;		ldy	MATHG
+;
+;		ldx	#<ROMPAGESIZE
+;		stx	MATHB
+;		ldx	#>ROMPAGESIZE
+;		stx	MATHA	; MULTIPLY
+;
+;		SEC
+;		WAITMATH
+;		SBC	MATHH
+;		TAX
+;		tya
+;		SBC	MATHG
+;		TAY
+;		TXA
+;		LDX	MATHD
+;
+;		RTS
+;
+;.FD		.DS	1
+;.FE		.DS	1
+;
+;	#ENDIF	; of #IFDEF GETDIRFAST_USER
+
+
+	#IFDEF GETDIR_USER | GETDIRFAST_USER
+
+* GetDirAddress calculates the ROM address of the directory entry for the file
+* specified in the A register
+*
+* ROMPAGESIZE is assumed to be one of 256, 512, 1024, 2048
+*
+* On exit:
+*	A = page number
+*	X,Y = byte offset into page
+
+GetDirAddress
+  #IF ROMDIR_ENTRY_SIZE=8
+	stz .ff
+	asl a
+	rol .ff
+	asl a
+	rol .ff
+	asl a
+	rol .ff
+  #ELSE
+	sta MATHD
+	stz MATHC
+	lda #ROMDIR_ENTRY_SIZE
+	sta MATHB
+	stz MATHA	; MULTIPLY
+	WAITMATH
+	lda MATHH
+	clc
+  #ENDIF
+
+  #IF ROM_HEADER_SIZE&$ff>0
+	adc #<ROM_HEADER_SIZE
+  #ENDIF
+	tax
+  #IF ROMDIR_ENTRY_SIZE=8
+	lda .ff
+  #ELSE
+	lda MATHG
+  #ENDIF
+	adc #>ROM_HEADER_SIZE
+  #IF ROMPAGESIZE>256
+	 pha
+	  and #>{ROMPAGESIZE-1}
+	  tay
+	 pla
+	lsr a
+    #IF ROMPAGESIZE>512
+	lsr a
+      #IF ROMPAGESIZE>1024
+	lsr a
+      #ENDIF
+    #ENDIF
+  #ENDIF
+
+	rts
+
+  #IF ROMDIR_ENTRY_SIZE=8
+.ff	.ds 1
+  #ENDIF
+
+	#ENDIF	; of #IFDEF GETDIR_USER | GETDIRFAST_USER
+
+
+
+
+

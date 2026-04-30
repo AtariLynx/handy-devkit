@@ -1,0 +1,257 @@
+00 ; 00  ============ Define SPACE, numeric digits, upper, lower, !"'(),-.:;?
+xx ; 01 - ^A
+xx ; 02 - ^B
+xx ; 03 - ^C
+xx ; 04 - ^D
+xx ; 05 - ^E
+xx ; 06 - ^F
+xx ; 07 - ^G
+xx ; 08 - ^H
+xx ; 09 - ^I
+xx ; 0A - ^J
+xx ; 0B - ^K
+xx ; 0C - ^L
+xx ; 0D - ^M
+xx ; 0E - ^N
+xx ; 0F - ^O
+xx ; 10 - ^P
+xx ; 11 - ^Q
+xx ; 12 - ^R
+xx ; 13 - ^S
+xx ; 14 - ^T
+xx ; 15 - ^U
+xx ; 16 - ^V
+xx ; 17 - ^W
+xx ; 18 - ^X
+xx ; 19 - ^Y
+xx ; 1A - ^Z
+xx ; 1B - LEFT-ARROW
+xx ; 1C - RIGHT-ARROW
+xx ; 1D - UP-ARROW
+xx ; 1E - DOWN-ARROW
+xx ; 1F - 
+01 ; 20 - SPACE
+40 ; 21 - ! <<
+41 ; 22 - " <<
+xx ; 23 - #
+xx ; 24 - $
+xx ; 25 - %
+xx ; 26 - &
+42 ; 27 - ' <<
+43 ; 28 - ( <<
+44 ; 29 - ) <<
+xx ; 2A - *
+xx ; 2B - +
+45 ; 2C - , <<
+46 ; 2D - - <<
+47 ; 2E - . <<
+xx ; 2F - /
+02 ; 30 - 0
+03 ; 31 - 1
+04 ; 32 - 2
+05 ; 33 - 3
+06 ; 34 - 4
+07 ; 35 - 5
+08 ; 36 - 6
+09 ; 37 - 7
+0A ; 38 - 8
+0B ; 39 - 9
+48 ; 3A - : <<
+49 ; 3B - ; <<
+xx ; 3C - <
+xx ; 3D - =
+xx ; 3E - >
+4A ; 3F - ? <<
+xx ; 40 - @
+0C ; 41 - A
+0D ; 42 - B
+0E ; 43 - C
+0F ; 44 - D
+10 ; 45 - E
+11 ; 46 - F
+12 ; 47 - G
+13 ; 48 - H
+14 ; 49 - I
+15 ; 4A - J
+16 ; 4B - K
+17 ; 4C - L
+18 ; 4D - M
+19 ; 4E - N
+1A ; 4F - O
+1B ; 50 - P
+1C ; 51 - Q
+1D ; 52 - R
+1E ; 53 - S
+1F ; 54 - T
+20 ; 55 - U
+21 ; 56 - V
+22 ; 57 - W
+23 ; 58 - X
+24 ; 59 - Y
+25 ; 5A - Z
+xx ; 5B - [
+xx ; 5C - \
+xx ; 5D - ]
+xx ; 5E - ^
+xx ; 5F - _
+xx ; 60 - `
+26 ; 61 - a
+27 ; 62 - b
+28 ; 63 - c
+29 ; 64 - d
+2A ; 65 - e
+2B ; 66 - f
+2C ; 67 - g
+2D ; 68 - h
+2E ; 69 - i
+2F ; 6A - j
+30 ; 6B - k
+31 ; 6C - l
+32 ; 6D - m
+33 ; 6E - n
+34 ; 6F - o
+35 ; 70 - p
+36 ; 71 - q
+37 ; 72 - r
+38 ; 73 - s
+39 ; 74 - t
+3A ; 75 - u
+3B ; 76 - v
+3C ; 77 - w
+3D ; 78 - x
+3E ; 79 - y
+3F ; 7A - z
+xx ; 7B - {
+xx ; 7C - |
+xx ; 7D - }
+xx ; 7E - ~
+xx ; 7F - DEL
+xx ; 80
+xx ; 81
+xx ; 82
+xx ; 83
+xx ; 84
+xx ; 85
+xx ; 86
+xx ; 87
+xx ; 88
+xx ; 89
+xx ; 8A
+xx ; 8B
+xx ; 8C
+xx ; 8D
+xx ; 8E
+xx ; 8F
+xx ; 90
+xx ; 91
+xx ; 92
+xx ; 93
+xx ; 94
+xx ; 95
+xx ; 96
+xx ; 97
+xx ; 98
+xx ; 99
+xx ; 9A
+xx ; 9B
+xx ; 9C
+xx ; 9D
+xx ; 9E
+xx ; 9F
+xx ; A0
+xx ; A1
+xx ; A2
+xx ; A3
+xx ; A4
+xx ; A5
+xx ; A6
+xx ; A7
+xx ; A8
+xx ; A9
+xx ; AA
+xx ; AB
+xx ; AC
+xx ; AD
+xx ; AE
+xx ; AF
+xx ; B0
+xx ; B1
+xx ; B2
+xx ; B3
+xx ; B4
+xx ; B5
+xx ; B6
+xx ; B7
+xx ; B8
+xx ; B9
+xx ; BA
+xx ; BB
+xx ; BC
+xx ; BD
+xx ; BE
+xx ; BF
+xx ; C0
+xx ; C1
+xx ; C2
+xx ; C3
+xx ; C4
+xx ; C5
+xx ; C6
+xx ; C7
+xx ; C8
+xx ; C9
+xx ; CA
+xx ; CB
+xx ; CC
+xx ; CD
+xx ; CE
+xx ; CF
+xx ; D0
+xx ; D1
+xx ; D2
+xx ; D3
+xx ; D4
+xx ; D5
+xx ; D6
+xx ; D7
+xx ; D8
+xx ; D9
+xx ; DA
+xx ; DB
+xx ; DC
+xx ; DD
+xx ; DE
+xx ; DF
+xx ; E0
+xx ; E1
+xx ; E2
+xx ; E3
+xx ; E4
+xx ; E5
+xx ; E6
+xx ; E7
+xx ; E8
+xx ; E9
+xx ; EA
+xx ; EB
+xx ; EC
+xx ; ED
+xx ; EE
+xx ; EF
+xx ; F0
+xx ; F1
+xx ; F2
+xx ; F3
+xx ; F4
+xx ; F5
+xx ; F6
+xx ; F7
+xx ; F8
+xx ; F9
+xx ; FA
+xx ; FB
+xx ; FC
+xx ; FD
+xx ; FE
+xx ; FF
+

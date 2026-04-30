@@ -1,0 +1,195 @@
+; Tue Sep 18 17:51:17 1990
+* === display.src ===========================================================
+*
+* Display and Color IO Routines --  the 6502 Side of Handy
+*
+* Copyright (C) 1988,1989,1990 Epyx, Inc.
+* All Rights Reserved
+* CONFIDENTIAL and PROPRIETARY
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 18-Sep-90	SHL		Added code to work around RICOH bug
+*				and support for the NO_RICOH_PATCH switch
+* 22-Mar-90	SHL		Removed PHA PHX and PLX PLA from IRQ routines
+* 20-Mar-90	SHL		Removed SEI, CLI from InitDisplayer, InitEOF,
+*				InitEOL
+* 7-Feb-90	SHL		Apple compatibility removed
+*				TIMEOUT macro moved to display.mac
+*				General cleanup and prettification
+* 3 July 89	-RJ		The RESET_TIMEOUT logic is moved from the
+*				input macros to the TIMEOUT macro here
+* 16 Jun 89	Peter Engelbrite Timeout constant set to 13 for 1 hour time out
+* 24 May 89	-RJ		Added AUTO_TIMEOUT_USER support code
+* 1 May 89	-RJ		Changed all IntTable references to sysIntTable
+*				which is defined now in the sys.mac file
+* 20 Apr 89	-RJ		Changed DisplayFrameCount so that it's
+*				included and incremented if FRAMECOUNT_UP is
+*				defined, included and decremented if
+*				FRAMECOUNT_DOWN is defined, else nothing.
+*				Moved DisplayFrameCount to this file.
+* 20 Mar 89	-RJ		Added increment of DisplayFrameCount in EOF
+*				handler that's included for EOF_USER's
+* 13 Feb 89	-RJ		Added InitDisplayer routine.  Added invocation
+*				of DISPLAY to normal EOF handler (FrameEnd).
+* 12 Feb 89	-RJ		EOF and EOL code save and restore A
+* 26-Dec-88	-RJ		Added EOL code
+* 23-Dec-88	-RJ		Added EOF code
+* Early 88	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+
+* If either FRAMECOUNT_UP or _DOWN is defined, then declare DisplayFrameCount
+	#IFDEF	FRAMECOUNT_UP | FRAMECOUNT_DOWN
+DisplayFrameCount	.DS	1
+	#ENDIF
+
+
+	#IFDEF EOF_USER
+* - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - -
+* - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - -
+* - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - -
+	;------	If an EOF user, create the elaborate version of the
+	;------	end-of-frame handler
+
+InitEOF
+		;------	Copy old vector into our exit JMP instruction
+		LDA	sysIntTable+{2*2}
+		STA	FrameEndExit+1
+		LDA	sysIntTable+{2*2}+1
+		STA	FrameEndExit+2
+		;------	Install our vector into the interrupt table
+		LDA	#<FrameEnd
+		STA	sysIntTable+{2*2}
+		LDA	#>FrameEnd
+		STA	sysIntTable+{2*2}+1
+		RTS
+
+FrameEnd
+* End-of-Frame handler
+		PHY
+
+		;------	The TIMEOUT macro will do nothing unless
+		;------ AUTO_TIMEOUT_USER has been defined in which case the
+		;------	system will turn off after a given amount of time
+	  #IFNDEF NO_RICOH_PATCH
+		lda MAPCTL
+		pha
+		 ora #SUZY_SPACE
+		 sta MAPCTL
+		 TIMEOUT
+		pla
+		sta MAPCTL
+	  #ELSE
+		TIMEOUT
+	  #ENDIF ;NDEF NO_RICOH_PATCH
+
+		;------	Turn on the display, and then EOF flag
+;!!! New:  invoke the DISPLAY macro here during EOF processing
+		DISPLAY
+
+	  #IFDEF FRAMECOUNT_UP
+		;------	Increment the DisplayFrameCount
+		INC	DisplayFrameCount
+	  #ELSE ; put this #ELSE here to avoid both UP and DOWN being included
+	    #IFDEF FRAMECOUNT_DOWN
+		;------	Decrement the DisplayFrameCount until it hits zero
+		LDA	DisplayFrameCount
+		BEQ	.10
+		DEC	DisplayFrameCount
+.10
+	    #ENDIF
+	  #ENDIF
+
+		LDA	DisplayFlags
+		ORA	#DISPLAY_EOFFLAG
+		STA	DisplayFlags
+
+		PLY
+FrameEndExit
+		;------	This vector ought to be patched by the Init code
+		JMP	IntReturn
+
+
+	#ELSE ; of #IFDEF EOF_USER
+
+* - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - -
+
+	;------	Else create a simple version of the end-of-frame handler
+
+InitDisplayer
+		;------	Copy old vector into our exit JMP instruction
+		LDA	sysIntTable+{2*2}
+		STA	EOFDisplayEndExit+1
+		LDA	sysIntTable+{2*2}+1
+		STA	EOFDisplayEndExit+2
+		;------	Install our vector into the interrupt table
+		LDA	#<EOFDisplayEnd
+		STA	sysIntTable+{2*2}
+		LDA	#>EOFDisplayEnd
+		STA	sysIntTable+{2*2}+1
+		RTS
+
+EOFDisplayEnd
+* End-of-Frame display handler
+		PHY
+
+		;------	The TIMEOUT macro will do nothing unless
+		;------ AUTO_TIMEOUT_USER is defined in which case the
+		;------ system will turn off after a given amount of time
+	  #IFNDEF NO_RICOH_PATCH
+		lda MAPCTL
+		pha
+		 ora #SUZY_SPACE
+		 sta MAPCTL
+		 TIMEOUT
+		pla
+		sta MAPCTL
+	  #ELSE
+		TIMEOUT
+	  #ENDIF ;NDEF NO_RICOH_PATCH
+
+		;------	Turn on the display
+		DISPLAY
+		PLY
+EOFDisplayEndExit
+		;------	This vector ought to be patched by the Init code
+		JMP	IntReturn
+	#ENDIF	; of #IFDEF EOF_USER
+
+* - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+
+
+	#IFDEF	EOL_USER
+InitEOL
+		;------	Copy old vector into our exit JMP instruction
+		LDA	sysIntTable+{0*2}
+		STA	LineEndExit+1
+		LDA	sysIntTable+{0*2}+1
+		STA	LineEndExit+2
+		;------	Install our vector into the interrupt table
+		LDA	#<LineEnd
+		STA	sysIntTable+{0*2}
+		LDA	#>LineEnd
+		STA	sysIntTable+{0*2}+1
+		RTS
+
+LineEnd
+* End-of-Line handler
+		PHA
+		LDA	DisplayFlags
+		ORA	#DISPLAY_EOLFLAG
+		STA	DisplayFlags
+		PLA
+LineEndExit
+		;------	This vector will be patched by the Init code
+		JMP	IntReturn
+
+	#ENDIF	; of #IFDEF EOL_USER
+
+
+

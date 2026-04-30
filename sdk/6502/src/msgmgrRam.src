@@ -1,0 +1,89 @@
+; Tuesday 13-Mar-90 12:42:12
+*============================================================================
+* 
+* Comlink Message Manager  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1988, 1989, Epyx, Inc.
+* 
+* Date       Name	Description
+* ---------  ---------- -----------------------------------------------------
+*
+* Sep  5 89  LEA	Created this file.
+*============================================================================
+
+
+
+
+
+*---------------------------------------------------------------------------
+* MESSAGE MANAGER VARIABLES
+*===========================================================================
+
+RxRawStat		.ds  1	; Received Message Status Byte
+				; B7 = Msg checksum error
+				; B6 = Msg size byte out of range
+				; B5 = Msg gap timeout occurred
+				; B4 = Byte parity error
+				; B3 = Byte overrun error
+				; B2 = Byte framing error
+				; B1 = 
+				; B0 = 
+
+RxRaw			.ds  MAX_DATA_SIZE+2
+				; holds raw incoming data
+
+RxByteCounter		.ds  1	; Position of next incoming byte in RxRaw
+
+RxChecksum		.ds  1	; used to accumulate checksum
+
+RxRawSize		.ds  1	; expected number of bytes in current raw msg
+
+RxMsgBusy		.ds  1	; non zero when user is reading message
+
+RxMsg			.ds  MAX_DATA_SIZE+1
+				; user's copy of received message (read only)
+
+RxMsgSize		.ds  1	; number of bytes in user's message
+
+RxMsgStat		.ds  1	; Received Message Status Byte (read only)
+				; B7 = Msg checksum error
+				; B6 = Msg size byte out of range
+				; B5 = Msg gap timeout occurred
+				; B4 = Byte parity error
+				; B3 = Byte overrun error
+				; B2 = Byte framing error
+				; B1 = 
+				; B0 = 
+
+
+TxRaw			.ds  MAX_DATA_SIZE+2
+				; holds raw outgoing data
+
+TxByteCounter		.ds  1	; Position of next outgoing byte in TxRaw
+
+TxRawSize		.ds  1	; number of bytes in current raw msg
+
+TxToRxTmrOn		.ds  1	; Bit(7) Set by transmitter to signal TxToRx
+				; Bit(6) Set to signal interMsg timeout
+				; All bits clear signals msg gap timeout
+				; Cleared by the timer timing out
+
+
+
+SERCTL_RAM		.ds  1	; Shadow of writes to SERCTL
+
+COMLINK_STAT		.ds  1  ; condition of the physical link
+				; B7 = comlink cable plugged in
+				; B6 = 
+				; B5 = 
+				; B4 = 
+				; B3 = 
+				; B2 = 
+				; B1 = break active
+				; B0 = 
+
+
+
+
+

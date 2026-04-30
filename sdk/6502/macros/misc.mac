@@ -1,0 +1,46 @@
+	#MACRO	BCD2ASC
+	PHA
+	LSR
+	LSR
+	LSR
+	LSR
+	JSR	.1
+	PLA
+	AND	#$0F
+.1	SED
+	CMP	#10
+	ADC	#$30	; '0'
+	CLD
+	JMP	COUT
+	#ENDMACRO
+
+
+; The COMBINE macro allows you to combine certain bits from one memory 
+; location with bits from a second memory location, leaving the result
+; in the accumulator.
+; 
+; To create the combination, you specify a mask value which is used to 
+; select which bits of the first and second args will be used in the result.  
+; Where the mask has set bits, the result will have bits from the first arg.  
+; Where the mask has clear bits, the result will have bits from the second arg.
+; 
+; EXAMPLE:
+; 	COMBINE	T1,T2,$F0
+; 			; A	T1	T2
+; 			; 	$59	$43
+; +	LDA	T1	; $59
+; +	EOR	T2	; $1A
+; +	AND	#$F0	; $10
+; +	EOR	T2	; $53
+	#MACRO	COMBINE
+	LDA	?0
+	EOR	?1
+	AND	#?2
+	EOR	?1
+	#ENDMACRO
+
+
+	.END
+
+
+

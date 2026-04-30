@@ -1,0 +1,535 @@
+; Fri Oct 12 11:47:33 1990
+* == comlink_logon.src =====================================================
+*
+* Intermediate level handler for Redeye  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 11-Oct-90	SHL		Added REDEYE_SLOWNESS support
+* 23-Mar-90	SHL		Split off file from comlink.src
+*				Now checks for redeye in use before login
+* 22-Mar-90	SHL		Removed PHA PHX and PLX PLA from timer IRQs
+* 20-Mar-90	SHL		Variable length message support added
+* 16-Mar-90	SHL		Revamped logon code
+*				Packdown happens after login instead of during
+* 9-Mar-90	SHL		Added new Redeye support
+* 6-Mar-90	SHL		Removed RG code support
+* 28-Feb-90	SHL		Made compatible with Handy 1.1 release
+*				Removed lots of #IFDEF bracketed code
+* 8-Sep-89	LEA		Added IFDEF NO_BRKS to change breaks to nops
+* 7-Sep-89	James Donald	Version finished for Cal Games
+*
+* ===========================================================================
+
+* The logon process calls routines in comlink.src
+
+; The algorithm for logon is as follows. Each machine speaks its player number
+; in order after random delays.  If it hears another machine with the same
+; player number it shifts its number to an unused number. (Or to a number it
+; thinks is unused.)
+
+; If it hears a machine whose number cyclically precedes it speak it sets
+; itself to speak after a random delay of 3 to 12 msecs.  For any other event
+; it sets itself to speak after a random delay of 16 to 32 msec
+
+; Thus when all is in order each machine speaks its number cyclically in
+; rapid succession
+
+
+	#MACRO MOVEI16
+	lda #<?0
+	sta ?1
+	lda #>?0
+	sta 1+?1
+	#ENDMACRO
+
+maximium_logon_message_number	.eq 2
+; at present only two logon messages, zero and two.
+
+; tolerance_of_silent_player	.eq 10+10*{MAX_PLAYERS-1}
+tolerance_of_silent_player	.eq 40
+; This is the number of transactions that can occur without a silent
+; player being logged out.
+
+INCONSISTANCY_PRESET	.eq 48-MAX_PLAYERS-MAX_PLAYERS
+; This is the countdown value that inconsistancy gets set to whenever
+; something is wrong
+
+logon_timer		.eq 5
+LOGON_TIMER		.eq TIMER0+{logon_timer*4}
+
+
+* ===========================================================================
+*
+* The portion of comlink code to handle logon
+
+
+
+send_logon_message
+	sta XmitBuffer+1
+	lda #LOGON_MSG_SIZE
+	jmp sendLengthMessage
+
+
+too_many_players	; time out while we have no valid player number
+	jsr decrement_everyone
+	jsr pick_new_player_number
+	jsr set_timer_16_32_millisec
+	jmp exit_logon_timer_irq_service
+
+
+I_have_no_player_number	; message received while we have no player number
+	ldx RxMsg+1
+	jsr force_active
+	jsr decrement_everyone
+	jsr pick_new_player_number
+	lda EndLogonRequest
+	bne .00
+	jmp clear_semaphore_rts
+
+.00	jmp finish_logon_next_timeout
+
+
+pick_new_player_number
+	ldx #0
+.00	  lda PlayerHeard,x
+	  beq .10
+	  inx
+	  cpx #MAX_PLAYERS
+	 bne .00
+
+	rts	; carry set from cpx - signal failure to find number
+
+.10	jsr set_number_and_force_active	; got a new number
+	stz logon_state			; back to normal login
+
+	clc	; signal that we've got a new number
+	rts
+
+
+invalidate_my_player_number
+	stz PlayerNumber
+	stz NumberOfPlayers
+	lda #2
+	sta logon_state
+	jsr set_timer_16_32_millisec
+	jmp clear_semaphore_rts
+
+
+end_logon_right_now
+	ldx PlayerNumber	; reassign my player number after login
+	bra .01
+.00	  lda PlayerHeard,x	
+	  bne .01
+	  dec PlayerNumber
+.01	  dex
+	 bpl .00
+
+	jsr disconnect_redeye
+	jmp exit_logon_timer_irq_service
+
+
+disconnect_redeye
+	 php
+	  sei
+
+	  lda #RESET_DONE
+	  sta SERIALRATE+TIM_CONTROLA	; kill redeye timer
+	  sta TIMER1+TIM_CONTROLA	; kill timer 1
+	  sta LOGON_TIMER+TIM_CONTROLA	; kill timer 5
+
+	  lda #PAREN+RESETERR+TXOPEN+PAREVEN	; disable serial ints
+	  sta SERCTL
+
+	  lda #SERIAL_INT+TIMER1_INT+TIMER5_INT	; clear pending ints
+	  sta INTRST
+
+	 plp
+
+	jsr ZeroComlinkVariables
+
+ #IF REDEYE_SLOWNESS > 0
+	lda #ENABLE_RELOAD+ENABLE_COUNT+REDEYE_SLOWNESS
+	sta Baud_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+TxToRx_Divider+REDEYE_SLOWNESS
+	sta TxToRx_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+MSG_GAP_Divider+REDEYE_SLOWNESS
+	sta MSG_GAP_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+InterMsg_Divider+REDEYE_SLOWNESS
+	sta InterMsg_Patch+1
+	lda #TxToRx_SLOW-1
+	sta TxToRx_Patch1+1
+ #ENDIF ; REDEYE_SLOWNESS > 0
+
+	rts
+
+
+
+send_end_logon_message
+	lda NumberOfPlayers
+	beq .10			; nobody else?
+	lda #2
+	sta XmitBuffer
+	lda XmitBuffer+1
+	dea
+	beq .10
+	jsr send_logon_message
+	jsr wait_16_milliseconds
+	bra .11
+
+.10	jsr finish_logon_next_timeout
+.11	jmp ply_return
+
+
+end_logon_command
+	ldx logon_state
+	jmp (.e0,x)
+.e0	.da .A2,.A0,.A2,.A2,.A0
+
+.A0	stz PlayerNumber
+	stz NumberOfPlayers
+.A2
+;	This is a command from someone to terminate logon
+	lda #TIMER_DONE
+	sta LOGON_TIMER+TIM_CONTROLB
+	lda RxMsg+1
+	sta timer_high_order_countdown
+
+finish_logon_next_timeout
+	lda #6
+	sta logon_state
+wait_16_milliseconds
+	lda #255
+	sta LOGON_TIMER+TIM_COUNT
+	stz LOGON_TIMER+TIM_CONTROLB	;start timer
+	jmp clear_semaphore_rts
+
+
+randomise
+	ldy index_into_random	; get random numbers by mixing in values from
+	lda random_data,y	;  the horizontal and vertical screen timers
+	adc TIMER0+TIM_COUNT
+	dey
+	bpl .00
+	ldy #random_data_size-1
+.00	adc random_data,y
+	sta random_data,y
+	adc TIMER2+TIM_COUNT
+	dey
+	bpl .01
+	ldy #random_data_size-1
+.01	adc random_data,y
+	sta random_data,y
+	sty index_into_random
+	rts
+
+
+decrement_everyone_else
+	ldx PlayerNumber
+	jsr force_active
+
+decrement_everyone
+	ldx #MAX_PLAYERS-1
+.04	  lda PlayerHeard,x
+	  beq .14
+	  dec PlayerHeard,x
+	  bne .14
+	  stz EndLogonRequest	; removing player - cancel end request
+	  lda #INCONSISTANCY_PRESET
+	  sta inconsistancy	; set inconsistancy
+	  lda power_of_two_table,x
+	  trb ActvPlrMask	; remove knowledge of player
+ #IF MAX_PLAYERS>8
+	  lda power_of_two_table+8,x
+	  trb ActvPlrMask+1
+ #ENDIF
+.14	  dex
+	 bpl .04
+	rts
+
+
+set_number_and_force_active
+	stx PlayerNumber	; fall into force_active
+
+force_active
+	lda #tolerance_of_silent_player
+	sta PlayerHeard,x
+	lda power_of_two_table,x
+	tsb ActvPlrMask
+ #IF MAX_PLAYERS>8
+	lda power_of_two_table+8,x
+	tsb ActvPlrMask+1
+ #ENDIF
+	rts
+
+
+set_timer_16_32_millisec
+	lda #1
+	sta timer_high_order_countdown
+
+	jsr randomise
+	ora #$7				; 16 to 32 msec
+
+set_timer_entry
+	sta LOGON_TIMER+TIM_COUNT	;set timer
+	stz LOGON_TIMER+TIM_CONTROLB	;start timer
+	rts
+
+
+set_timer_500_msec
+	lda #31
+	sta timer_high_order_countdown
+	bra set_timer_entry
+
+
+timer_collided
+	lda #$30			; equals three milliseconds
+	sta LOGON_TIMER+TIM_COUNT
+	stz LOGON_TIMER+TIM_CONTROLB	;restart timer
+;	A problem with using the timer in one shot mode is that if it
+;	ever times out and is not restarted the whole process dies.
+	jmp ply_return
+
+
+logon_timer_irq_service
+	phy
+	lda #1
+	tsb comlink_semaphore
+	bne timer_collided
+	lda timer_high_order_countdown
+	beq dispatch_timer_irq
+	dec timer_high_order_countdown
+	START_ONESHOT logon_timer, 255
+
+exit_logon_timer_irq_service
+	stz comlink_semaphore
+ply_return
+	ply
+
+	plx
+	pla
+	rti
+
+
+dispatch_timer_irq
+	cli
+	ldx logon_state
+	jmp (.e0,x)
+.e0	.DA send_normal_logon_message, too_many_players
+	.DA send_end_logon_message, end_logon_right_now
+	.DA send_normal_logon_message
+
+
+send_normal_logon_message
+	stz logon_state
+
+	lda inconsistancy
+	beq .14
+	dec inconsistancy
+
+.14	lda PlayerNumber
+	jsr send_logon_message
+
+	jsr decrement_everyone_else
+	jsr set_timer_16_32_millisec
+
+	ldy #$FF		; compute NumberOfPlayers
+	ldx #MAX_PLAYERS-1
+.06	  lda PlayerHeard,x
+	  beq .19
+	  iny
+	  cmp #tolerance_of_silent_player-MAX_PLAYERS-2
+	  blt exit_logon_timer_irq_service
+.19	  dex
+	 bpl .06
+
+	sty NumberOfPlayers
+	lda inconsistancy
+	bne exit_logon_timer_irq_service
+
+	lda EndLogonRequest	; see if we should end logon
+	beq exit_logon_timer_irq_service
+
+	lda #10			; start logon termination process
+	sta XmitBuffer+1
+	lda #4
+	sta logon_state
+	bra exit_logon_timer_irq_service
+
+
+unintelligible_message
+ignore_message
+	stz comlink_semaphore
+overflow_collision_service
+	lda logon_state
+	cmp #8
+	bne .90
+	lda EndLogonRequest
+	beq .00
+	jmp finish_logon_next_timeout
+.00	jsr set_timer_500_msec
+.90	jmp randomise
+
+
+received_message_service
+	lda #1
+	tsb comlink_semaphore
+	bne overflow_collision_service
+	lda RxMsgStat
+	bne unintelligible_message
+	lda RxMsgSize
+	cmp #LOGON_MSG_SIZE
+	bne unintelligible_message
+	lda RxMsg+{LogonGameNumber-XmitBuffer}
+	cmp #<GAME_ID
+	bne unintelligible_message
+	lda RxMsg+{LogonGameNumber-XmitBuffer}+1
+	cmp #>GAME_ID
+	bne unintelligible_message
+	lda RxMsg
+	bit #1
+	bne unintelligible_message
+	tax
+	cpx #maximium_logon_message_number+1
+	bge unintelligible_message
+	jmp (.e0,x)
+.e0	.da receive_normal_logon_message,end_logon_command
+
+
+receive_normal_logon_message
+	ldx RxMsg+1
+	cpx #MAX_PLAYERS
+	bge unintelligible_message
+
+	ldx logon_state
+	jmp (.e1,x)
+.e1	.da .A2, I_have_no_player_number, ignore_message, ignore_message, .A2
+
+.A2	stz logon_state
+	lda RxMsg+{ActvPlrMask-XmitBuffer}
+	eor ActvPlrMask
+ #IF MAX_PLAYERS>8
+	bne .11
+	lda RxMsg+{ActvPlrMask-XmitBuffer}+1
+	eor ActvPlrMask+1
+ #ENDIF
+	beq .10
+.11	lda #INCONSISTANCY_PRESET	; data disagrees with my view
+	sta inconsistancy
+
+.10	ldx RxMsg+1
+	cpx PlayerNumber
+	bne .13
+	 phx
+	  jsr pick_new_player_number
+	 plx
+	bcc .14
+	jmp invalidate_my_player_number	; oops, too many players
+
+.13	jsr force_active
+
+.14	ldy #0			; figure out who's next to speak
+.04	  iny
+	  inx
+	  cpx #MAX_PLAYERS
+	  bne .15
+	  ldx #0
+.15	  lda PlayerHeard,x
+	 beq .04
+	cpx PlayerNumber
+	bne .16
+
+	jsr randomise	; it's my turn to speak, set timeout 3-12 msec
+	and #$3F	; if no gap before me, set timer to $30-$70 *64usec
+	adc #$20	; equals 3-7 milliseconds
+	cpy #1
+	beq .17
+	adc #$50	; if gap, set timer to 8-12 msec in case someone fills
+.17	stz timer_high_order_countdown
+	sta LOGON_TIMER+TIM_COUNT
+	stz LOGON_TIMER+TIM_CONTROLB	;start timer
+	bra .18
+
+; Case someone else's turn to speak
+
+.16	jsr set_timer_16_32_millisec
+
+.18	jsr decrement_everyone_else
+
+clear_semaphore_rts
+	stz comlink_semaphore
+	rts
+
+
+start_logon
+	jsr ZeroComlinkVariables	; erase all comlink variables
+
+	lda #8				; start by checking for redeye busy
+	sta logon_state
+
+	lda #<GAME_ID			; copy game number to message buffer
+	sta LogonGameNumber
+	lda #>GAME_ID
+	sta LogonGameNumber+1
+
+	ldx #0				; we are now player zero
+	jsr set_number_and_force_active
+
+	lda #INCONSISTANCY_PRESET
+	sta inconsistancy
+
+	lda #$80			; set status flag
+	sta LogonInProgress
+	stz NumberOfPlayers		; set initial number of players
+
+ #IF REDEYE_SLOWNESS > 0
+	lda #ENABLE_RELOAD+ENABLE_COUNT	; patch message manager for fast logon
+	sta Baud_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+TxToRx_Divider
+	sta TxToRx_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+MSG_GAP_Divider
+	sta MSG_GAP_Patch+1
+	lda #ENABLE_INT+ENABLE_COUNT+InterMsg_Divider
+	sta InterMsg_Patch+1
+	lda #TxToRx_TIMEOUT-1
+	sta TxToRx_Patch1+1
+ #ENDIF ; REDEYE_SLOWNESS > 0
+
+	 php
+	  sei
+	  clc
+	  jsr initMessageManager	; set up message manager
+
+	  lda #<received_message_service	; link into manager vectors
+	  sta readMsgVector
+	  lda #<overflow_collision_service
+	  sta msgOverflowVector
+	  sta transmissionErrorVector
+	  sta msgTimeoutVector
+	  lda #<msgMgrRtn
+	  sta interMsgTimeoutVector
+	  sta messageSentVector
+
+	  lda #>received_message_service
+	  sta readMsgVector+1
+	  lda #>overflow_collision_service
+	  sta msgOverflowVector+1
+	  sta transmissionErrorVector+1
+	  sta msgTimeoutVector+1
+	  lda #>msgMgrRtn
+	  sta interMsgTimeoutVector+1
+	  sta messageSentVector+1
+
+	  INIT_ONESHOT logon_timer, AUD_64	; set up logon timer
+	  lda #<logon_timer_irq_service		; link in our routine
+	  sta sysIntTable+{2*logon_timer}
+	  lda #>logon_timer_irq_service
+	  sta sysIntTable+{2*logon_timer}+1
+	  jsr set_timer_500_msec		; and start timer
+	 plp
+	rts
+
+

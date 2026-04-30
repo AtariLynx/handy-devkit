@@ -1,0 +1,146 @@
+; Wednesday 27-Jun-90 11:49:43
+* == sys.mac ===============================================================
+*
+* System Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 20-Jun-90	SHL		RAMCART_USER support added
+* 28-Mar-90	SHL		INITINT new clears and resets serial IRQs
+*				if SERIALPORT_USER defined
+* 22-Mar-90	SHL		INITINT now vectors all IRQS to IntReturn
+*				instead of user supplied RTS
+* 20-Mar-90	SHL		Removed SEI, CLI from INITINT macro
+* 7-Mar-90	SHL		DISPCTL_RAM now initialized in INITSYS
+* 9-Feb-90	SHL		Modified BRK_USER support to force break on
+*				Howard board, unless user uses the SET_BRK
+*				macro to redirect breaks
+*				INITINT is now required before any use of
+*				INITEOF, INITEOL or SET_DISPLAY... macros
+*				Added HBRK macro
+*				Moved initialization of MAPCTL to INITSYS
+*				Removed HFIX1 macros
+* 31 May 89	-RJ		Added BRK_USER support to INITINT macro
+*				Killed call to InitSys
+*				Added SET_BRK macro
+* 25 May 89	-RJ		Added AUTO_TIMEOUT_USER support code
+* 22 May 89	-RJ		Changed init'ing of IODIR's LIGHT_OFF to
+*				RESTLESS, also now init IODAT too
+* 16 May 89	-RJ		Added setting TXOPEN to SERCTL in INITSYS
+* 11 May 89	-RJ		Moved declaration of sysIntTable to sys.mac
+* 10 May 89	-RJ		Changed CART_STROBE to CART_ADDR_DATA
+* 1 May 89	-RJ		Added the INITINTS macro for user-controlled
+*				interrupt table handling.  Also defined
+*				and allow redefinition of sysIntTable, which
+*				is now used in the display.src file
+* 20 Apr 89	-RJ		Added initialization of IODIR and IODIR_RAM
+* 6 Apr 89	-RJ		Moved init of SPRSYS into INITSYS
+* 19 Mar 89	-RJ		Added HFIX1 macros, modified INITSYS for HFIX1
+* 18 Mar 89	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+* HBRK macro forces a break on a Howard board.  On a chip system, will be
+* executed as one-byte one-cycle NOP.
+	#MACRO HBRK
+	.HS 13
+	#ENDM
+
+
+* Do some needed hardware initialization to get system into known state
+	#MACRO INITSYS
+
+	LDA #DISP_COLOR+DISP_FOURBIT+DMA_ENABLE
+	STA DISPCTL_RAM
+
+	LDA #LEFTHAND		; the equates have been defined to prefer this
+	STA SPRSYS_RAM
+	STA SPRSYS
+
+	LDA #VECTOR_SPACE	; map in all RAM except for CPU vectors
+	STA MAPCTL
+
+	;------	Set parallel CART_ADDR_DATA and RESTLESS as output and high
+	;------ If RAMCART_USER, set AUDIN (READ_ENABLE) as output and high
+	;------	all others as input
+ #IFDEF RAMCART_USER
+	LDA #CART_ADDR_DATA+RESTLESS+READ_ENABLE
+ #ELSE
+	LDA #CART_ADDR_DATA+RESTLESS
+ #ENDIF
+	STA IODAT_RAM
+	STA IODAT
+	STA IODIR_RAM
+	STA IODIR
+
+	LDA #TXOPEN	; Turn off serial IRQs before starting
+	STA SERCTL	;  and make sure serial port is open-collector
+
+	  #IFDEF AUTO_TIMEOUT_USER
+		STZ TimeoutCount+1
+		STZ TimeoutCount+2
+	  #ENDIF
+
+	#ENDMACRO
+
+
+	#MACRO	INITINT
+sysIntTable	.EQ ?0
+
+		;------	Set the break and int vectors to point to our code
+		LDA #<UserIntHandler
+		STA CPU_IRQ
+		LDA #>UserIntHandler
+		STA CPU_IRQ+1
+
+		LDX #8*2-1
+??	.= *
+		  LDA #>IntReturn
+		  STA ?0,X
+		  DEX
+		  LDA #<IntReturn
+		  STA ?0,X
+		  DEX
+		 BPL ??
+
+	  #IFDEF BRK_USER
+		LDA CPU_NMI
+		STA BRK_vector+2
+		LDA CPU_NMI+1
+		STA BRK_vector+3
+	  #ENDIF ; of #IFDEF BRK_USER
+
+	  #IFDEF SERIALPORT_USER
+		lda #TXOPEN
+		sta SERCTL
+		lda #SERIAL_INT
+		sta INTRST
+	  #ENDIF
+
+	#ENDMACRO
+
+
+	#MACRO SET_BRK
+		LDA #<?0
+		STA BRK_vector+2
+		LDA #>?0
+		STA BRK_vector+3
+		LDA #$EA	; nop
+		STA BRK_vector
+	#ENDMACRO
+
+
+	#MACRO RESET_TIMEOUT
+		STZ TimeoutCount+1	; else reset timeout counter
+		STZ TimeoutCount+2
+	#ENDMACRO
+
+
+	#MACRO ECHO_VALUE
+		.ECHO "Value of ?0 is ?%d0 ($?%x0)"
+	#ENDMACRO
+

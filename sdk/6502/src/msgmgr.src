@@ -1,0 +1,629 @@
+; Fri Oct 12 11:48:05 1990
+*============================================================================
+* 
+* Comlink low level Message Manager  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+* 
+* Date		Name	Description
+* ---------	-------	-----------------------------------------------------
+* 11-Oct-90	SHL	Added REDEYE_SLOWNESS support for "slow" redeye
+* 22-Mar-90	SHL	Removed PHA PHX and PLX PLA from timer IRQs
+* 20-Mar-90	SHL	Removed INT4_VEC_USER code.
+* 15-Mar-90	SHL	Added Long_TIMEOUT support
+* 13-Mar-90	SHL	Added messageSentVector support
+* 12-Mar-90	SHL	Added interMsgTimeoutVector support
+* 9-Mar-90	SHL	Minor cleanup and code tightening
+* Sep  5 89	LEA	Put Variables in a separate file.
+*			Added msgTimeout Vector.
+* Sep  4 89	LEA	Crafted code for speed.
+*			added INT4_VEC_USER code.
+* Sep  2 89	LEA	Added fast irq user code.
+* Sep  1 89	LEA	Made Msg Gap Timeout insert an MsgGapTimeout message
+*			in the circular receive buffer.
+* Sep  1 89	LEA	Put circular buffer between Rx IRQs and the code that
+*			processes received bytes.
+* Aug 24 89	LEA	Created this file.
+*============================================================================
+
+
+MsgMgrVers		.eq $0104
+
+
+
+
+
+
+*---------------------------------------------------------------------------
+* USER ROUTINES CALLED BY MESSAGE MANAGER
+*===========================================================================
+*===========================================================================
+*===========================================================================
+
+
+* Vector: readMsgVector
+*===========================================================================
+* This is called when a complete message has been received.
+* RxMsgStat, RxMsgSize and RxMsg can then be read.
+* (interrupt mask is cleared)
+
+
+* Vector: msgOverflowVector
+*===========================================================================
+* This is called when a complete message has been received and you are still
+* reading the last one.
+* (interrupt mask is cleared)
+
+
+* Vector: msgTimeoutVector
+*===========================================================================
+* This is called when a message byte failed to arrive in time. It tells you
+* that some data was received but not enough to complete the message.
+* (interrupt mask is set)
+
+
+* Vector: interMsgTimeoutVector
+*===========================================================================
+* This is called when too much time has passed before a message has started
+* to come in.
+* (interrupt mask is set)
+
+
+* Vector: transmissionErrorVector
+*===========================================================================
+* The handy's receiver always receives what it sent unless somebody else is
+* sending at the same time. At the end of a transmission, as soon as the
+* last byte has gone out, the byte in the receiver is compared with the last
+* byte that was transmitted. If they don't match, this error routine is called
+* (interrupt mask is set)
+
+
+
+
+
+*---------------------------------------------------------------------------
+* ROUTINES CALLED BY USER
+*===========================================================================
+*===========================================================================
+*===========================================================================
+
+
+
+initMessageManager
+*---------------------------------------------------------------------------
+* Call this once to initialize the Message Manager
+*===========================================================================
+
+		;-- install comlink interrupt handlers
+		php
+		sei
+
+		lda #<SerialIrq
+		ldx #>SerialIrq
+
+		sta sysIntTable+{4*2}
+		stx sysIntTable+{4*2}+1
+		lda #<msgMgrTimerIrq
+		ldx #>msgMgrTimerIrq
+		sta sysIntTable+{COMLINK_TIMER*2}
+		stx sysIntTable+{COMLINK_TIMER*2}+1
+
+		plp
+
+		;-- set baud rate
+		lda #1
+		sta SERIALRATE
+
+		;-- if REDEYE_SLOWNESS = 0 use 62500 baud,
+		;-- if 1 use 31250, if 2 use 15625, if 3 use 7812.5
+
+Baud_Patch	.= *
+		lda #ENABLE_RELOAD+ENABLE_COUNT+REDEYE_SLOWNESS
+		sta SERIALRATE+TIM_CONTROLA
+
+		INIT_ONESHOT COMLINK_TIMER,AUD_4
+
+		;-- init this flag
+		stz RxMsgBusy
+
+		stz TxToRxTmrOn
+
+		;-- fall thru to resetReceiver
+
+
+resetReceiver
+		;-- enable the message receiver
+		stz RxByteCounter
+
+		;-- read and init the uart
+		lda SERDAT
+		ldy SERCTL
+
+		ldx #STDCOM+RESETERR+RXINTEN
+		stx SERCTL_RAM
+		stx SERCTL
+
+		ldx #SERIAL_INT
+		stx INTRST
+
+		rts
+
+
+
+
+
+WaitAndSendMsg
+*---------------------------------------------------------------------------
+* Wait until last msg has been sent then call SendMsg
+*===========================================================================
+.11		bit SERCTL_RAM
+		bmi .11
+		;-- fall thru to SendMsg
+
+
+
+SendMsg
+*---------------------------------------------------------------------------
+*
+* This routine is called by the user to send a message.
+*
+* This routine grabs a copy of the user's data, adds length byte and
+*    checksum byte, and activates the interrupt driven message transmitter.
+*
+* Call with:	address of user's data in X,Y.
+*		number of bytes of data in A.  (can be from 0 to 254)
+*
+* Well behaved users will not call SendMsg while SERCTL_RAM(bit7) is set.
+*		( see WaitAndSendMsg above. )
+*===========================================================================
+
+		;-- patch addr of user data into move routine
+		stx .11+1
+		sty .11+2
+
+ #IFDEF REDEYE_DEBUG
+		cmp #255	;check range of number of bytes
+		blt .b1
+		lda #254
+		brk		; oops
+ #ENDIF
+
+.b1		sta TxRaw
+
+		tax
+		bra .12
+
+		;-- copy user data to TxRaw
+.11		  lda 9999,X	; selfmod
+		  sta TxRaw+1,X
+.12		  dex
+		  cpx #$ff
+		 bne .11
+
+		;-- calculate and store checksum
+.22		ldx TxRaw
+		inx
+		lda #-1
+.33		  sec
+		  sbc TxRaw-1,X
+		  dex
+		 bne .33
+		ldx TxRaw
+		sta TxRaw+1,X
+
+		;-- init the message transmitter
+		inx
+		inx
+		stx TxRawSize
+
+		lda #1
+		sta TxByteCounter
+
+		;-- stop message gap timer
+		STOP_ONESHOT COMLINK_TIMER
+
+		;-- send first byte
+		lda TxRaw
+		sta SERDAT
+
+		;-- enable Tx and disable Rx interrupts
+		php
+		sei
+
+		lda #STDCOM+TXINTEN
+		sta SERCTL_RAM
+		sta SERCTL
+		lda SERDAT
+		plp
+
+		rts
+
+
+
+
+
+*---------------------------------------------------------------------------
+* INTERNAL CODE
+*===========================================================================
+*===========================================================================
+*===========================================================================
+
+
+
+*---------------------------------------------------------------------------
+*
+* This is the Serial Interrupt handler.
+*
+*===========================================================================
+
+SerialIrq
+		phy
+		bit SERCTL_RAM
+		bpl RxIrq
+
+
+* TxIrq
+*---------------------------------------
+		ldx TxByteCounter
+
+		;-- check if this was the last byte in the message
+		cpx TxRawSize
+		beq .11
+
+		;-- send next byte
+		lda TxRaw,X
+		sta SERDAT
+		inc TxByteCounter
+
+.22		;-- clear interrupt
+		lda #SERIAL_INT
+		sta INTRST
+
+		ply
+
+		plx
+		pla
+		rti
+
+
+.11		;-- notify timer interrupt handler to do turnaround code
+		lda #%10000000
+		sta TxToRxTmrOn
+
+		;-- reload Tx to Rx turnaround timer
+;		START_ONESHOT COMLINK_TIMER,TxToRx_TIMEOUT
+
+TxToRx_Patch1	.= *
+	lda #TxToRx_SLOW-1
+	sta COMLINK_TIMER_ADDR+TIM_COUNT
+TxToRx_Patch	.= *
+	lda #ENABLE_INT+ENABLE_COUNT+TxToRx_Divider+REDEYE_SLOWNESS
+	sta COMLINK_TIMER_ADDR+TIM_CONTROLA
+	stz COMLINK_TIMER_ADDR+TIM_CONTROLB
+
+		;-- disable TxEmpty interrupts
+		lda #STDCOM
+		sta SERCTL_RAM
+		sta SERCTL
+
+		bra .22
+
+
+
+RxIrq
+*---------------------------------------
+
+		;-- restart Msg Gap timer
+		stz TxToRxTmrOn
+
+	lda #MSG_GAP_TIMEOUT-1
+	sta COMLINK_TIMER_ADDR+TIM_COUNT
+MSG_GAP_Patch	.= *
+	lda #ENABLE_INT+ENABLE_COUNT+MSG_GAP_Divider+REDEYE_SLOWNESS
+	sta COMLINK_TIMER_ADDR+TIM_CONTROLA
+	stz COMLINK_TIMER_ADDR+TIM_CONTROLB
+
+		;-- capture serial data and status
+		ldx SERDAT
+		lda SERCTL
+
+		;-- reset uart error bits
+		ldy #STDCOM+RXINTEN+RESETERR
+		sty SERCTL
+
+		;-- reset interrupt
+		ldy #SERIAL_INT
+		sty INTRST
+
+		;-- get current byte's reception errors
+		and #PARERR+OVERRUN+FRAMERR+RXBRK
+		bne .80		; this is bad data
+
+
+* Good Data
+* This code handles bytes received with no errors:
+
+		txa			; get data in A
+		ldx RxByteCounter	; is this the first byte of a msg ?
+		beq .60
+
+		;-- save received byte
+		sta RxRaw,X
+		inx
+		stx RxByteCounter	; advance data pointer
+
+		;-- is this the last byte of a message ?
+		cpx RxRawSize
+		bge .70
+
+.90		;-- return from serial interrupt
+
+		ply
+
+		plx
+		pla
+		rti
+
+
+
+
+
+* First Byte
+		;-- advance data pointer
+.60		inc RxByteCounter
+
+		;-- init error accumulator
+		stz RxRawStat
+
+		;-- is the size an allowable value ?
+		cmp #MAX_DATA_SIZE+1
+		blt .61
+		;-- if not notify of size byte error
+		lda #MSG_SIZE_ERR
+		tsb RxRawStat
+		;-- and assume max message size
+		lda #MAX_DATA_SIZE
+.61		;-- save data
+		sta RxRaw
+		inc
+		inc
+		sta RxRawSize
+		bra .90		; start timer and return
+
+* Last Byte
+.70		jsr endOfMsg
+		bra .90		; return from interrupt
+
+
+
+* Bad Data
+* This code handles bytes received with errors:
+
+.80		bit #RXBRK	; if a break condition don't save the rx data
+		bne .90
+
+		;-- accumulate received errors
+		tsb RxRawStat
+
+		ldx RxByteCounter	; is this the first byte ?
+		bne .81
+		ldy #MAX_DATA_SIZE+2	; default to max size
+		sty RxRawSize
+
+.81		bit #OVERRUN	; lost a byte ?
+		beq .82
+		inx
+
+.82		cpx RxRawSize	; is this the last byte ?
+		bge .70
+		stx RxByteCounter
+		bra .90		; start timer and return
+
+;.70		jsr endOfMsg
+;		bra .90		; return from interrupt
+
+
+
+endOfMsg
+*---------------------------------------------------------------------------
+		;-- stop message gap timer
+		STOP_ONESHOT COMLINK_TIMER
+
+		jsr startInterMsgTimeout
+
+		;-- reset message byte counter
+		stz RxByteCounter
+
+		;-- is last msg still being read by user ?
+		lda #128
+		tsb RxMsgBusy
+
+		beq .11
+		cli
+		jmp msgMgrRtn	; selfmod  ; let error handler return for us
+msgOverflowVector .= *-2
+
+		;-- init checksum
+.11		lda RxRaw
+		sta RxChecksum
+
+		;-- copy msg data to user's buffer
+		ldx RxRawSize
+		dex
+		dex
+		stx RxMsgSize
+		inx
+.22		  ;-- copy raw to Msg and evaluate checksum
+		  lda RxRaw,X
+		  sta RxMsg-1,X
+		  clc
+		  adc RxChecksum
+		  sta RxChecksum
+		  dex
+		 bne .22
+
+		;-- evaluate checksum
+		lda RxChecksum
+		inc
+		beq .33
+		;-- notify of checksum error
+		lda #MSG_CHECKSUM_ERR
+		tsb RxRawStat
+.33
+		;-- copy msg status to user's buffer
+		lda RxRawStat
+		sta RxMsgStat
+
+		;-- call the higher level handler
+		;-- with valid data in RxMsgStat, RxMsgSize and RxMsg
+		cli
+		jsr msgMgrRtn	; selfmod
+readMsgVector	.= *-2
+
+		;-- clear RxMsgBusy
+.44		stz RxMsgBusy
+
+msgMgrRtn	rts
+
+readMsgVector	.eq readMsgVector	; defined so they can be forced into
+msgOverflowVector .eq msgOverflowVector	;  symbol table with +E command switch
+
+
+startInterMsgTimeout
+		lda PlayerNumber
+		bne .90
+
+		;-- notify timer interrupt handler to do timeout code
+		lda #%01000000
+		sta TxToRxTmrOn
+
+		;-- reload timer
+;		START_ONESHOT COMLINK_TIMER,InterMsg_TIMEOUT
+	lda #InterMsg_TIMEOUT-1
+	sta COMLINK_TIMER_ADDR+TIM_COUNT
+InterMsg_Patch	.= *
+	lda #ENABLE_INT+ENABLE_COUNT+InterMsg_Divider+REDEYE_SLOWNESS
+	sta COMLINK_TIMER_ADDR+TIM_CONTROLA
+	stz COMLINK_TIMER_ADDR+TIM_CONTROLB
+
+.90		rts
+
+
+startLongTimeout
+		;-- notify timer interrupt handler to do timeout code
+		lda #%01000000
+		sta TxToRxTmrOn
+
+		;-- reload timer
+;		START_ONESHOT COMLINK_TIMER,InterMsg_TIMEOUT
+	lda #Long_TIMEOUT-1
+	sta COMLINK_TIMER_ADDR+TIM_COUNT
+	lda #ENABLE_INT+ENABLE_COUNT+Long_Divider
+	sta COMLINK_TIMER_ADDR+TIM_CONTROLA
+	stz COMLINK_TIMER_ADDR+TIM_CONTROLB
+
+.90		rts
+
+
+
+
+
+
+*---------------------------------------------------------------------------
+*
+* This is the Message Manager's timer interrupt routine
+*
+* The timer is used for three things:
+*
+*	-- Tx to Rx turnaround. ie, reactivating the receiver after the
+*	     last bit of a transmission has gone out
+*
+*	-- Message gap timeout. ie, sensing that so much time has passed
+*	     since the last byte was received that the next byte must be
+*	     the start of a new message.
+*
+*	-- Intermessage gap timeout. ie, sensing that so much time has passed
+*	     since the last message was received that something must be wrong
+*	     in the communication.
+*
+*===========================================================================
+
+msgMgrTimerIrq
+		phy
+
+		;-- is this a TxToRx, MsgGap, or InterMsg timeout
+		bit TxToRxTmrOn
+		stz TxToRxTmrOn
+		bmi TxToRxTimeout
+		bvc MsgGapTimeout
+
+
+* InterMsgTimeout
+*-----------------------------------------------------------------------
+		jsr msgMgrRtn	; selfmod
+interMsgTimeoutVector .eq *-2
+
+		bra endTmrIrq
+
+
+MsgGapTimeout
+*-----------------------------------------------------------------------
+		jsr startInterMsgTimeout
+
+		;-- reset message byte counter
+		stz RxByteCounter
+
+	;	cli	; don't cli if using system.8 int handler
+
+		;-- notify sender of timeout error
+		jsr msgMgrRtn	; selfmod
+msgTimeoutVector .eq *-2
+
+		bra endTmrIrq
+
+
+
+
+TxToRxTimeout
+*-----------------------------------------------------------------------
+		jsr startInterMsgTimeout
+
+		jsr resetReceiver	; returns SERDAT in A, SERCTL in Y
+
+		;-- compare last received byte with last transmitted byte
+		ldx TxRawSize
+		cmp TxRaw-1,X
+		bne txErr
+
+		;-- check last received byte's errors
+		tya
+		bit #PARERR+FRAMERR
+		bne txErr
+		jsr msgMgrRtn	; selfmod
+messageSentVector .eq *-2
+
+		bra endTmrIrq
+
+
+txErr
+*-----------------------------------------------------------------------
+	;	cli	; don't cli if using system.8 int handler
+
+		;-- notify sender of transmission collision error
+		jsr msgMgrRtn	; selfmod
+transmissionErrorVector .eq *-2
+
+;		bra endTmrIrq	; fall through
+
+
+endTmrIrq
+*-----------------------------------------------------------------------
+		ply
+
+		plx
+		pla
+		rti
+
+
+

@@ -1,0 +1,773 @@
+; Thu Oct 11 21:27:32 1990
+* = comlink.src ===========================================================
+*
+* Intermediate level handler for Redeye  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 27-Mar-90	SHL		Added CLI before call to WaitAndSendMsg
+* 23-Mar-90	SHL		Split off logon code to comlink_logon.src
+*				Now checks for redeye in use before login
+* 22-Mar-90	SHL		Removed PHA PHX and PLX PLA from timer IRQs
+* 20-Mar-90	SHL		Variable length message support added
+* 16-Mar-90	SHL		Revamped logon code
+*				Packdown happens after login instead of during
+* 9-Mar-90	SHL		Added new Redeye support
+* 6-Mar-90	SHL		Removed RG code support
+* 28-Feb-90	SHL		Made compatible with Handy 1.1 release
+*				Removed lots of #IFDEF bracketed code
+* 8-Sep-89	LEA		Added IFDEF NO_BRKS to change breaks to nops
+* 7-Sep-89	James Donald	Version finished for Cal Games
+*
+* ===========================================================================
+
+
+
+
+	#MACRO POWERTABLE
+systemp	.= 1
+	  #REP ?0
+	    .BY systemp
+systemp	    .= systemp*2
+	  #ENDM
+	#ENDM
+
+power_of_two_table
+ #IF MAX_PLAYERS>8
+	.hs 0102040810204080
+	.hs 0000000000000000
+	POWERTABLE MAX_PLAYERS-8
+ #ELSE
+	POWERTABLE MAX_PLAYERS
+ #ENDIF
+
+PlrOffsets
+systemp	.= 0
+	#REP MAX_PLAYERS
+	.BY systemp
+systemp .= systemp+PLAYER_DATA_SIZE
+	#ENDM
+
+
+* ===========================================================================
+*
+* The portion of comlink code to handle communication after logon completed
+
+start_comlink
+; starts up the normal comlink communication
+	jsr ZeroComlinkVariables
+
+	lda NumberOfPlayers
+	bne .30
+	rts
+
+.30	 php
+	  sei
+	  sec
+	  jsr initMessageManager
+
+	  lda #<RcvMsgInt	; set message manager vectors
+	  sta readMsgVector
+ #IFNDEF REDEYE_ERROR_COUNTS
+	  lda #<msgMgrRtn
+ #ELSE
+	  lda #<incrxfailures
+ #ENDIF ;NDEF REDEYE_ERROR_COUNTS
+	  sta msgOverflowVector
+	  sta transmissionErrorVector
+	  sta msgTimeoutVector
+
+	  lda #>RcvMsgInt
+	  sta readMsgVector+1
+ #IFNDEF REDEYE_ERROR_COUNTS
+	  lda #>msgMgrRtn
+ #ELSE
+	  lda #>incrxfailures
+ #ENDIF ;NDEF REDEYE_ERROR_COUNTS
+	  sta msgOverflowVector+1
+	  sta transmissionErrorVector+1
+	  sta msgTimeoutVector+1
+
+	  ldx PlayerNumber
+	  bne .00
+
+	  lda #<TimeoutInt	; set vectors needed if master
+	  sta interMsgTimeoutVector
+	  lda #<ChkResendQueue
+	  sta messageSentVector
+
+	  lda #>TimeoutInt
+	  sta interMsgTimeoutVector+1
+	  lda #>ChkResendQueue
+	  sta messageSentVector+1
+
+	  lda #%01000000	; as master, mark that it's ok to send 1st
+	  sta OutGoingFlag
+
+.00	  stz RxMask		; mark that we are waiting for preceding data
+ #IF MAX_PLAYERS>8
+	  stz RxMask+1
+ #ENDIF
+.01	    sec
+	    rol RxMask
+ #IF MAX_PLAYERS>8
+	    rol RxMask+1
+ #ENDIF
+	    dex
+	   bpl .01
+
+	  ldx NumberOfPlayers	; mark all "received data" as bad
+	  lda #%10000000
+.10	    sta PlayerFlag0,x
+	    sta PlayerFlag1,x
+	    dex
+	   bpl .10
+
+ #IFDEF REDEYE_ERROR_COUNTS
+	  stz resendreqs
+	  stz resendreqs+1
+	  stz sendreqs
+	  stz sendreqs+1
+	  stz rxfailures
+	  stz rxfailures+1
+	  stz badmessages
+	  stz badmessages+1
+	  stz lockouts
+	  stz lockouts+1
+ #ENDIF
+
+	 plp
+	rts
+
+ #IFDEF REDEYE_ERROR_COUNTS
+incrxfailures
+	inc rxfailures
+	bne .90
+	inc rxfailures+1
+.90	rts
+ #ENDIF ;DEF REDEYE_ERROR_COUNTS
+
+
+RcvMsgInt
+	lda #1
+	tsb comlink_semaphore	; lock out overlapping interrupts
+ #IFDEF REDEYE_ERROR_COUNTS
+	beq .9a
+	inc lockouts
+	bne .99
+	inc lockouts+1
+	bra .99
+ #ELSE
+	bne .99
+ #ENDIF
+
+.9a	lda RxMsgStat
+	beq .00
+ #IFDEF REDEYE_ERROR_COUNTS
+	inc rxfailures
+	bne .90
+	inc rxfailures+1
+ #ELSE
+.91
+ #ENDIF
+.90	stz comlink_semaphore	; garbled message, throw it away
+.99	rts
+
+.00	lda RxMsgSize
+	beq .90
+	lda RxMsg	; what type of message is it
+	and #%00000111
+	cmp #6
+ #IFDEF REDEYE_ERROR_COUNTS
+	bcc .01
+.91	inc badmessages
+	bne .90
+	inc badmessages+1
+	bra .90
+ #ELSE
+	bcs .90
+ #ENDIF
+.01	sbc #3-1	; cc subtracts one more
+	bcc .91
+	asl a
+	tax
+	jmp (.e0,x)
+
+.e0	.DA RcvData, RcvSendReq, RcvResendReq
+
+
+RcvData
+	lda RxMsgSize	; incoming message right size?
+ #IFDEF VAR_SIZE_DATA
+	cmp #PLAYER_DATA_SIZE+2
+	bcc .00
+ #ELSE
+	cmp #PLAYER_DATA_SIZE+1
+	beq .00
+ #ENDIF
+.90
+ #IFDEF REDEYE_ERROR_COUNTS
+	inc badmessages
+	bne .91
+	inc badmessages+1
+ #ENDIF
+.91	stz comlink_semaphore
+	rts
+
+.00	lda RxMsg	; coming from a valid player?
+	and #%01111000
+	lsr a
+	lsr a
+	lsr a
+	cmp NumberOfPlayers
+	beq .10
+	bcs .90
+
+.10	cmp PlayerNumber	; see if me, if so must be resend from master
+	beq .91
+	tax
+	lda RxMsg	; check sequence of incoming message
+	bcc .11
+	eor #%10000000
+.11	eor Sequence
+	bmi .91
+
+	lda PlayerFlag0,x	; see if already received message
+	bit RxMsg
+	bpl .12
+	lda PlayerFlag1,x
+.12	cmp #0
+	beq .30
+	lda power_of_two_table,x
+	trb RxMask
+ #IF MAX_PLAYERS>8
+	bne .20
+	lda power_of_two_table+8,x
+	trb RxMask+1
+ #ENDIF
+	beq .30
+
+.20	ldy PlrOffsets,x
+	 phx
+	  bit RxMsg
+	  bmi .25
+
+	  stz PlayerFlag0,x
+ #IFDEF VAR_SIZE_DATA
+	  lda RxMsgSize
+	  dec a
+	  sta PlayerDataSize0,x
+	  beq .29
+ #ENDIF
+	  ldx #1
+.21	    lda RxMsg,x
+	    sta PlayerData0,y
+	    inx
+	    iny
+ #IFDEF VAR_SIZE_DATA
+	    cpx RxMsgSize
+ #ELSE
+	    cpx #PLAYER_DATA_SIZE+1
+ #ENDIF
+	   bcc .21
+	  bra .29
+
+.25	  stz PlayerFlag1,x
+ #IFDEF VAR_SIZE_DATA
+	  lda RxMsgSize
+	  dec a
+	  sta PlayerDataSize1,x
+	  beq .29
+ #ENDIF
+	  ldx #1
+.26	    lda RxMsg,x
+	    sta PlayerData1,y
+	    inx
+	    iny
+ #IFDEF VAR_SIZE_DATA
+	    cpx RxMsgSize
+ #ELSE
+	    cpx #PLAYER_DATA_SIZE+1
+ #ENDIF
+	   bcc .26
+
+.29	 plx
+
+.30	ldy PlayerNumber	; am I the master?
+	bne .31
+	cpx NumberOfPlayers
+	bne .40
+	jmp ChkResendQueueAndSend	; yep, see who's next to send
+
+.31	lda power_of_two_table,y	; am I only one left to send data?
+	eor RxMask
+	bne .40
+ #IF MAX_PLAYERS>8
+ 	lda power_of_two_table+8,y
+	eor RxMask+1
+	bne .40
+ #ENDIF
+
+	inx
+	cpx PlayerNumber	; was message received from previous player?
+	bne .40
+
+	jsr TryToSendMyData	; Must be my turn to send data
+
+.40	stz comlink_semaphore
+	rts
+
+
+
+RcvSendReq
+	ldx PlayerNumber	; can't be for master
+	beq .90
+
+	lda RxMsgSize
+	dec a	; cmp #1
+ #IFDEF REDEYE_ERROR_COUNTS
+	beq .00
+	inc badmessages
+	bne .90
+	inc badmessages+1
+	bra .90
+ #ELSE
+	bne .90
+ #ENDIF
+
+.00	lda RxMsg		; request coming for me??
+	and #%01111000
+	lsr a
+	lsr a
+	lsr a
+	cmp PlayerNumber
+	bne .90
+
+ #IFDEF REDEYE_ERROR_COUNTS
+	inc sendreqs
+	bne .01
+	inc sendreqs+1
+ #ENDIF
+
+.01	lda RxMsg		; asking for current frame or previous??
+	eor Sequence
+	bmi .50
+
+	lda power_of_two_table,x	; am I waiting for data??
+	eor RxMask
+ #IF MAX_PLAYERS>8
+	bne .10
+ 	lda power_of_two_table+8,x
+	eor RxMask+1
+ #ENDIF
+	beq .20
+
+.10	jsr AskForResend
+	bra .90
+
+.20	jsr TryToSendMyData
+	bra .90
+
+.50	lda RxMsg
+	and #%10000000
+	jsr SendPlrXSequenceData
+;	bra .90
+
+.90	stz comlink_semaphore
+	rts
+
+
+RcvResendReq
+	ldx PlayerNumber	; only for master to deal with
+	bne .90
+
+.00	lda RxMsgSize
+	cmp #MASK_SIZE+1
+ #IFDEF REDEYE_ERROR_COUNTS
+	beq .10
+.01	inc badmessages
+	bne .90
+	inc badmessages+1
+	bra .90
+ #ELSE
+	bne .90
+ #ENDIF
+
+ #IFDEF REDEYE_ERROR_COUNTS
+.10	inc resendreqs
+	bne .11
+	inc resendreqs+1
+ #ENDIF
+
+.11	jsr FigureWhosNext
+
+	lda RxMsg		; if message out of order, don't deal with it
+	and #%01111000
+	lsr a
+	lsr a
+	lsr a
+	cmp WhosNext
+	bne .20
+
+	sta WhosReTxReq		; Set up to resend messages
+	lda RxMsg
+	and #%10000000
+	sta ReTxSequence
+	lda RxMsg+1
+	sta ReTxMask
+ #IF MAX_PLAYERS>8
+	lda RxMsg+2
+	sta ReTxMask+1
+ #ENDIF
+	jmp ResendNext		; will clear comlink_semaphore
+
+.20	jsr AskForSend
+;	bra .90
+
+.90	stz comlink_semaphore
+	rts
+
+
+
+ChkResendQueue			; we get here following transmission
+	lda LongTimeoutFlag
+	beq .00
+	jsr startLongTimeout	; if we asked for send, set long timeout
+.00	lda #1
+	tsb comlink_semaphore
+	bne .91
+	lda WhosReTxReq
+	bne ResendNext
+
+.90	stz comlink_semaphore
+.91	rts
+
+
+TimeoutInt
+	lda #1
+	tsb comlink_semaphore
+	beq ChkResendQueueAndSend
+	jmp startInterMsgTimeout	; restart timer if locked out
+
+ChkResendQueueAndSend
+	lda WhosReTxReq
+	bne ResendNext
+
+FigureAndAskForSend
+	jsr FigureWhosNext
+	jsr AskForSend
+
+.90	stz comlink_semaphore
+	rts
+
+
+
+ResendNext
+	ldx #$ff
+	lda ReTxMask
+ #IF MAX_PLAYERS>8
+	bne .00
+	ldx #7
+	lda ReTxMask+1
+ #ENDIF
+	bne .00
+	stz WhosReTxReq
+	bra FigureAndAskForSend
+
+.00	  inx
+	  lsr a
+	 bcc .00
+
+.10	lda power_of_two_table,x
+	trb ReTxMask
+ #IF MAX_PLAYERS>8
+	lda power_of_two_table+8,x
+	trb ReTxMask+1
+ #ENDIF
+	lda ReTxSequence
+	cpx WhosReTxReq
+	bcc .11
+	eor #%10000000
+.11	jsr SendPlrXSequenceData
+	stz comlink_semaphore
+	rts
+
+
+TryToSendMyData
+	lda OutGoingFlag
+	bmi .20
+	lda #%01000000		; signal that we couldn't send when we wanted
+	tsb OutGoingFlag
+	rts
+
+.20	ldx PlayerNumber
+
+ #IFDEF REDEYE_DEBUG
+	lda power_of_two_table,x	; make sure we're not waiting for msg
+	cmp RxMask
+   #IF MAX_PLAYERS>8
+ 	bne .10
+	lda power_of_two_table+8,x
+	cmp RxMask+1
+   #ENDIF
+	beq .00
+.10	brk
+ #ENDIF
+
+.00	lda Sequence
+	bmi .01
+	stz PlayerFlag0,x	; mark data as sent/received
+	bra .02
+.01	stz PlayerFlag1,x
+
+.02	jsr SendPlrXSequenceData	; send the data
+
+	lda Sequence		; get ready to deal with next sequence
+	eor #%10000000
+	sta Sequence
+
+	ldx NumberOfPlayers	; mark all players as data needed
+	lda power_of_two_table,x
+	asl a
+	sta RxMask
+ #IF MAX_PLAYERS>8
+	lda power_of_two_table+8,x
+	rol
+ #ENDIF
+	dec RxMask
+ #IF MAX_PLAYERS>8
+	bpl .03
+	dea
+.03	sta RxMask+1
+ #ENDIF
+
+	lda #1			; if master, expect next data from player 1
+	sta WhosNext
+	stz OutGoingFlag	; mark that we've used our data
+
+	rts
+
+
+SendPlrXSequenceData
+ #IFDEF VAR_SIZE_DATA
+	ldy PlayerDataSize0,x
+	bit #%10000000
+	beq .01
+	ldy PlayerDataSize1,x
+.01	phy
+ #ENDIF
+
+	ldy PlrOffsets,x
+	sta XmitBuffer
+	txa
+	ldx #0
+	asl a
+	asl a
+	asl a
+	ora #3
+	ora XmitBuffer
+	sta XmitBuffer
+	bmi .10
+
+.00	  lda PlayerData0,y
+	  sta XmitBuffer+1,x
+	  iny
+	  inx
+	  cpx #PLAYER_DATA_SIZE
+	 bcc .00
+	bra .20
+
+.10	  lda PlayerData1,y
+	  sta XmitBuffer+1,x
+	  iny
+	  inx
+	  cpx #PLAYER_DATA_SIZE
+	 bcc .10
+
+.20	stz LongTimeoutFlag
+ #IFDEF VAR_SIZE_DATA
+	pla
+	inc a
+ #ELSE
+	lda #PLAYER_DATA_SIZE+1
+ #ENDIF
+;	jmp sendLengthMessage
+	bra sendLengthMessage	; within range
+
+
+AskForSend
+	lda WhosNext
+	bne .10
+	jmp TryToSendMyData
+
+.10
+ #IFDEF REDEYE_ERROR_COUNTS
+	inc sendreqs
+	bne .11
+	inc sendreqs+1
+ #ENDIF
+.11	asl a
+	asl a
+	asl a
+	ora #4
+	ora Sequence
+	eor #%10000000
+	sta XmitBuffer
+	lda #1
+	sta LongTimeoutFlag
+;	jmp sendLengthMessage
+	bra sendLengthMessage		; within range
+
+
+AskForResend
+ #IFDEF REDEYE_ERROR_COUNTS
+	inc resendreqs
+	bne .00
+	inc resendreqs+1
+ #ENDIF
+
+.00	ldx PlayerNumber
+	txa
+	asl a
+	asl a
+	asl a
+	ora Sequence
+	ora #5
+	sta XmitBuffer
+	lda power_of_two_table,x	; ask for everyone we don't have
+	eor RxMask			; (except ourself, of course)
+	sta XmitBuffer+1
+ #IF MAX_PLAYERS>8
+	lda power_of_two_table+8,x
+	eor RxMask+1
+	sta XmitBuffer+2
+ #ENDIF
+	stz LongTimeoutFlag
+	lda #MASK_SIZE+1
+;	jmp sendLengthMessage		; fall through
+
+
+sendLengthMessage
+	ldx #<XmitBuffer
+	ldy #>XmitBuffer
+	cli
+	jmp WaitAndSendMsg
+
+
+
+launch_redeye
+	lda OutGoingFlag	; system still hasn't sent previous data (?)
+	bmi launch_redeye
+
+	ldx PlayerNumber	; copy our data into appropriate buffer
+	ldy PlrOffsets,x
+	lda Seq
+	bmi .12
+
+ #IFDEF VAR_SIZE_DATA
+	lda OutGoingSize
+	sta PlayerDataSize0,x
+	beq .20
+ #ENDIF
+	ldx #0
+.00	  lda OutGoingData,x
+	  sta PlayerData0,y
+	  inx
+	  iny
+.01
+ #IFDEF VAR_SIZE_DATA
+	  cpx OutGoingSize
+ #ELSE
+	  cpx #PLAYER_DATA_SIZE
+ #ENDIF
+	 bcc .00
+	bra .20
+
+.12
+ #IFDEF VAR_SIZE_DATA
+	lda OutGoingSize
+	sta PlayerDataSize1,x
+	beq .20
+ #ENDIF
+	ldx #0
+.10	  lda OutGoingData,x
+	  sta PlayerData1,y
+	  inx
+	  iny
+.11
+ #IFDEF VAR_SIZE_DATA
+	  cpx OutGoingSize
+ #ELSE
+	  cpx #PLAYER_DATA_SIZE
+ #ENDIF
+	 bcc .10
+
+.20	lda NumberOfPlayers
+	bne .21
+	stz PlayerFlag0
+	stz PlayerFlag1
+	bra .90
+	
+.21	lda #1			; pause redeye for a moment
+	tsb comlink_semaphore
+
+	lda #%10000000		; tell system our data is good now
+	tsb OutGoingFlag
+
+	lda OutGoingFlag	; did we already fail to send our data?
+	and #%01111111
+	beq .40
+
+ #IFDEF REDEYE_DEBUG
+	ldx PlayerNumber	; are we the master?
+	bne .30
+	lda WhosReTxReq		; are we still doing resends?
+	beq .30
+	brk			; should never happen
+ #ENDIF
+
+.30	jsr TryToSendMyData	; send our data
+
+.40	stz comlink_semaphore	; let redeye go
+
+.90	lda #%10000000
+	eor Seq
+	sta Seq
+
+	rts
+
+
+FigureWhosNext
+	ldx WhosNext
+.00	  lda power_of_two_table,x
+	  bit RxMask
+	  bne .10
+ #IF MAX_PLAYERS>8
+	  lda power_of_two_table+8,x
+	  bit RxMask+1
+	  bne .10
+ #ENDIF
+	  cpx NumberOfPlayers
+	  inx
+	 bcc .00
+
+	ldx #0
+	
+.10	stx WhosNext
+
+	rts
+
+
+ZeroComlinkVariables
+	ldx #end_of_comlink_erasable_variables-start_of_comlink_variables
+.00	  stz start_of_comlink_variables-1,x
+	  dex
+	 bne .00
+
+	rts
+
+
+

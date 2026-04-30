@@ -1,0 +1,201 @@
+; Wednesday 18-Apr-90 08:45:39
+* === tunpack.src ===========================================================
+* 
+* Game Cartridge I/O Routines  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+* 
+* Date		Name		Description
+* ---------	-------------	---------------------------------------------
+* 18-Apr-90	SHL		Updated for compatibility with 1.3 release of
+*				cartridge code
+* 20-Feb-90	SHL		Fixed bug that powered down carts during reads
+*
+* ===========================================================================
+
+* Modified by Greg Omi to link directly into the cart loader system
+;-----------------------------------------
+* FIRST VERSION OF DECOMPRESS BY CHUCK SOMMERVILLE FOR CAL GAMES.
+* ORIGINAL VERSION FROM CARL MEY 27 OCT 87 THIS COMMENT ONLY MOD.
+*------------
+* TOKEN DECOMPRESS FOR EPYX
+* BY CHUCK SOMMERVILLE & CARL MEY
+* MODIFIED FOR FAST DECOMPRESS AND 65C02 BY CHUCK ON 4/28/89
+* LINK BUG FIXED 5/15/89 BY CHUCK AND GILL
+* 5/15/89 PUT.DATA INSTALLED INLINE
+*-------------------------------
+* TOKEN UNPACK
+* BY CHUCK SOMMERVILLE 12/10/86
+* ENTRY POINT IS UNPACK.TOKEN
+*
+* EVERY TIME THIS CODE WANTS ANOTHER BYTE, IT CALLS GET.DATA
+*
+* WHEN IT WANTS TO STORE A BYTE IT CALLS PUT.DATA
+*
+* THEN RETURNS TO CALLER WHEN THE ENTIRE FILE
+* HAS BEEN UNCOMPRESSED
+*
+* THE USER SHOULD SUPPLY THIS CODE WITH 
+* HIS/HER OWN GET.DATA AND PUT.DATA ROUTINES
+*
+* GET.DATA MUST RETURN THE BYTE IN THE A-REG
+* AND PRESERVE THE X-REG
+*
+* PUT.DATA IS PASSED THE BYTE IN THE A-REG
+* AND CAN SCRAMBLE THE REGISTERS AT WILL
+*
+*-------------------------------
+unpacker
+	STX	sysptr
+	STY	sysptr+1
+
+	SET_TO_READ_CART
+;------	Create the complement of the number of bytes remaining
+;------	to be read in this cartridge page
+;;		LDA	#<{ROMPAGESIZE-1}
+;;		SEC
+;;		SBC	CartOffsetLow
+;;		EOR	#$FF
+;;		STA	endpage_count
+;;		LDA	#>{ROMPAGESIZE-1}
+;;		SBC	CartOffsetHigh
+;;		EOR	#$FF
+;;		STA	endpage_count+1
+
+	sec			; simpler code to accomplish above
+	lda CartOffsetLow
+	sbc #<ROMPAGESIZE
+	sta endpage_count
+	lda CartOffsetHigh
+	sbc #>ROMPAGESIZE
+	sta endpage_count+1
+
+UNPACK.TOKEN
+	LDX #63
+.14	STZ TOKEN.DEPTHS,X		;CLEAR TABLE
+	STZ TOKEN.DEPTHS+64,X
+	STZ TOKEN.DEPTHS+128,X
+	STZ TOKEN.DEPTHS+192,X
+	DEX
+	BPL .14
+
+	JSR GET.DATA			;READ HEADER
+	STA DEPTH
+	JSR GET.DATA
+	STA MORE.FLAG
+	JSR GET.DATA
+	STA COUNT
+	JSR GET.DATA
+	STA COUNT+1
+
+	LDA DEPTH		;SPECIAL CHECK FOR NO TOKENS
+	BEQ .33
+	LDX #1
+.1
+	JSR GET.DATA		;READ TOKEN TABLE
+	STA TOKEN.VAL,X
+	TAY
+	LDA TOKEN.DEPTHS,Y
+	STA LINK,X
+	TXA
+	STA TOKEN.DEPTHS,Y
+	JSR GET.DATA
+	STA TOKEN.LO,X
+	JSR GET.DATA
+	STA TOKEN.HI,X
+	INX
+	DEC DEPTH
+	BNE .1
+.33	INC COUNT+1		;PRE INCREMENT LENGTH
+	INC COUNT
+TOKEN.UNLOADED
+	DEC COUNT
+	BNE .6
+	DEC COUNT+1
+	BNE .6
+	LDA MORE.FLAG
+	bne	UNPACK.TOKEN
+
+	LDA	endpage_count
+	CLC
+	ADC	#<ROMPAGESIZE
+	STA	CartOffsetLow
+	LDA	endpage_count+1
+	ADC	#>ROMPAGESIZE
+	STA	CartOffsetHigh
+	RESTORE_CART
+	LDX	sysptr
+	LDY	sysptr+1
+	RTS
+
+.6	JSR GET.DATA
+	TAY
+	LDX TOKEN.DEPTHS,Y
+	BNE .4
+.55
+	STA (sysptr)
+	INC sysptr
+	BNE .1
+	INC sysptr+1
+.1	
+	LDA DEPTH
+	BEQ TOKEN.UNLOADED
+	DEC DEPTH
+	PLX
+	LDA TOKEN.HI,X
+.5	STX .34+1	: *** NOTE SELF MOD ***
+	TAY
+	LDX TOKEN.DEPTHS,Y
+	BEQ .55
+.34	CPX #$FF	; THIS IS MODIFIED BY ABOVE !
+	BCC .4
+	LDA LINK,X
+	TAX
+	BNE .34
+	TYA		;RAW DATA
+	BRA .55
+.4	PHX
+	LDA TOKEN.LO,X
+	INC DEPTH
+	BRA .5
+
+
+GET.DATA
+		LDA	RCART_0
+;------	Bump the cart page counters
+		INC	endpage_count
+		BNE	.10
+		INC	endpage_count+1
+		BNE	.10
+
+;------	Reached end of page, so go to next
+		 pha
+		   phx
+;		     phy
+		      INC CartPage
+		      lda CartPage
+		      JSR SetCartPage
+;		     ply
+		   plx
+
+;;------ Remember to make sure that ROM power is on!	-SHL
+;		  lda IODAT_RAM
+;		  and #~CART_ADDR_DATA
+;		  sta IODAT
+
+;------	Set that there's a whole page to read
+		  LDA	#<~{ROMPAGESIZE-1}
+		  STA	endpage_count
+		  LDA	#>~{ROMPAGESIZE-1}
+		  STA	endpage_count+1
+		 pla
+
+.10		rts
+
+
+endpage_count
+		.byte	0,0
+COUNT	.DS 2
+DEPTH	.DS 1
+MORE.FLAG	.DS 1

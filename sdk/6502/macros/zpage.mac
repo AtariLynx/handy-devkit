@@ -1,0 +1,73 @@
+; ---------------------------------------------------------------------------
+; Zero-Page memory allocation macros
+;  Created:  Mike Ireton, 10/07/88
+; Modified:  RJ Mical, 14 Nov 88
+; 
+; BEGIN_ZPAGE (or BEGIN_ALLOCATE_ZEROPAGE) 
+; and END_ZPAGE (or END_ALLOCATE_ZEROPAGE) are two very useful macros 
+; for safely allocating zero-page memory space in any file.  
+; If you use these macros around every z-page memory allocation you make, 
+; the macros will track your allocations and dole out successive z-page 
+; memory locations every time you ask for them.  This allows both you and the 
+; emulator to make z-page allocations without stepping on one another, and it 
+; allows you to make z-page allocations locally in the file that needs them 
+; rather than making all your allocations in one file or manually tracking 
+; down all free zero page locations and figuring out which ones can be used.  
+; 
+; -- TO USE ---
+; This file defines a redefinable value named NEXTZPG, which it initializes 
+; to 0.  NEXTZPG holds the address of the next available zero-page byte, 
+; which in most cases will be at memory location $00.  If you want to reserve 
+; zero-page memory locations starting from $00, you can redefine NEXTZPG to 
+; a value of your own choice after you've included this file and before you've 
+; used any of this file's macros.  For example, say that you have some reason 
+; to stash away memory locations $00 through $0F.  At the top of your program, 
+; before calling BEGIN_ZPAGE (or BEGIN_ALLOCATE_ZEROPAGE) you would do this:  
+;                .IN    6502:macros/zpage.mac
+;   NEXTZPG     .=     $10
+; 
+; Then, when the need arises for zero page variables, start off by using 
+; BEGIN_ZPAGE (or BEGIN_ALLOCATE_ZEROPAGE).  This will set some temporary 
+; labels and re-assign the assembler's location counter to someplace in 
+; zero-page (as pointed to by the current NEXTZPG).  After your allocations, 
+; end with END_ZPAGE (or END_ALLOCATE_ZEROPAGE), which will save your current 
+; z-page offset and restore the program counter.  For example:
+;   RoutineX                        RoutineX
+;           BEGIN_ZPAGE                     BEGIN_ALLOCATE_ZEROPAGE
+;   ZPG1    .DS    2      - or -    ZPG1    .DS    2
+;   COUNT   .DS    1                COUNT   .DS    1
+;           END_ZPAGE                       END_ALLOCATE_ZEROPAGE
+;           STA    ZPG1                     STA    ZPG1
+; 
+; Remember that you should only define data areas between the BEGIN and END. 
+; Anything else is dangerous and should be avoided (and if you don't know why, 
+; you should find another line of work... :-)  )
+; 
+; Also, note that these macros use another redefinable value, TEMPORG, to 
+; record and restore the program counter 
+
+NEXTZPG	.= $00
+
+	#MACRO BEGIN_ZPAGE
+TEMPORG	  .= *
+	  .ORG NEXTZPG
+	#ENDM
+
+	#MACRO BEGIN_ALLOCATE_ZEROPAGE
+	  BEGIN_ZPAGE
+	#ENDM
+
+
+	#MACRO END_ZPAGE
+NEXTZPG	  .= *
+	  #IF NEXTZPG > $0100
+	    .ECHO "ERROR:  z-page allocations went out of page zero"
+	  #ENDIF
+	  .ORG TEMPORG
+	#ENDM
+
+	#MACRO END_ALLOCATE_ZEROPAGE
+	  END_ZPAGE
+	#ENDM
+
+

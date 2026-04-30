@@ -1,0 +1,71 @@
+; Tue Aug 29 10:01:14 1989
+*============================================================================
+* 
+* ComLink  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1988, 1989, Epyx, Inc.
+* 
+* Date       Name	Description
+* ---------  ---------- -----------------------------------------------------
+*
+* Aug 24 89  LEA	Created this file.
+*============================================================================
+
+
+
+
+
+
+#MACRO INIT_ONESHOT
+*---------------------------------------------------------------------------
+* Set up timer for one-shot operation with interrupts enabled
+* first arg is timer number, second arg is the clock select value (0 thru 7)
+*===========================================================================
+		#IF  ?1 > 7
+		.echo	"Bogus timer clock select value"
+		.end
+		#ENDIF
+??		.=	TIMER0+?0*4
+
+		stz	??+TIM_CONTROLA	; inhibit all timer activity
+
+		lda	#255		; preset count far above zero
+		sta	??+TIM_COUNT
+
+		lda	#TIMER_DONE	; inhibit down-counting
+		sta	??+TIM_CONTROLB
+
+		lda	#ENABLE_INT+ENABLE_COUNT+?1
+		sta	??+TIM_CONTROLA	; put it in one-shot mode
+#ENDMACRO
+
+
+#MACRO START_ONESHOT
+*---------------------------------------------------------------------------
+* first arg is timer number, second is count
+*===========================================================================
+??		.=	TIMER0+?0*4
+
+		lda	#?1-1		; timer runs for count+1 clocks
+		sta	??+TIM_COUNT
+
+		stz	??+TIM_CONTROLB	; reset the timer-done bit
+#ENDMACRO
+
+
+#MACRO STOP_ONESHOT
+*---------------------------------------------------------------------------
+* arg is timer number
+*===========================================================================
+??		.=	TIMER0+?0*4
+
+		lda	#TIMER_DONE
+		sta	??+TIM_CONTROLB
+#ENDMACRO
+
+
+
+
+
+

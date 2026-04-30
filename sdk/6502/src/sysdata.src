@@ -1,0 +1,75 @@
+; Tuesday 27-Mar-90 10:58:04
+* === sysdata.src ===========================================================
+* 
+* System Data Allocations  --  the 6502 Side of Handy
+* 
+* Copyright (c) 1988,1990 Epyx, Inc.
+* All Rights Reserved
+* CONFIDENTIAL and PROPRIETARY
+* 
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 27-Mar-90	SHL		Removed BufferAddrL, BufferAddrH
+* 22-Mar-90	SHL		Added INTSET_RAM shadow for IRQs
+* 9-Feb-90	SHL		Removed Apple emulation compatibility
+* 30 May 89	-RJ		Added IODAT_RAM
+* 24 May 89	-RJ		Added AUTO_TIMEOUT_USER support code
+* 20 Apr 89	-RJ		Added IODIR_RAM
+* 19 Apr 89	-RJ		Moved DisplayFrameCount to display.src
+* 20 Mar 89	-RJ		Added DisplayFrameCount
+* 13 Feb 89	-RJ		Added DisplayBuffer
+* 26 Jan 88	-RJ		Ended Interruptus
+* 24 Dec 88	-RJ		Added Interruptus
+* 22 Dec 88	-RJ		Added DISPCTL_RAM, RenderBuffer, 
+*				BufferAddrL/H, and DisplayFlags with its defs
+*				Added note about .ORGing to non-zpage
+* Early 88	=RJ Mical=	Created this file!
+* 
+* ===========================================================================
+
+
+* NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  
+* 
+* This file should be included before any of the 6502:src files.
+* 
+* Note that you should .ORG to a non-zero page address before including 
+* this file.  This is because this file includes data declarations that 
+* don't need to be in zero-page memory.
+* 
+* NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  NOTE  
+
+
+* Here are the declarations of the local copies of write-only registers 
+* (and read-doesn't-equal-write registers such as SPRSYS).  
+* Whenever you want to make a change to one of the hardware registers 
+* that's write-only, you should read from this RAM copy, change the value, 
+* and then write the value out to both the RAM copy and the hardware register.
+SPRSYS_RAM	.DS 1
+DISPCTL_RAM	.DS 1
+IODAT_RAM	.DS 1
+IODIR_RAM	.DS 1
+
+
+* Display buffer pointers for use by the system display routines
+RenderBuffer	.DS 2
+DisplayBuffer	.DS 2
+
+* Shadow of INTSET used in IRQ handler
+INTSET_RAM	.DS 1
+
+
+	#IFDEF AUTO_TIMEOUT_USER
+TimeoutCount	.DS 3
+	#ENDIF
+
+
+* The DisplayFlags field is a field that may enjoy multiple CPU instruction 
+* read-modify-write operations peformed by both interrupt and mainline code.  
+* Because of this, any code must make sure that interrupt disable set before 
+* beginning a read-modify-write cycle, or use the TSB/TRB instructions.
+DisplayFlags	.DS	1
+* Here's the definitions of DisplayFlags
+DISPLAY_EOFFLAG		.EQ $80	; Set every EOF
+DISPLAY_EOLFLAG		.EQ $40	; Set every EOL
+
+

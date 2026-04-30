@@ -1,0 +1,116 @@
+; Monday 30-Jul-90 15:22:29
+* == hprint.src ============================================================
+*
+* HandyPrint Routines  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 30-Jul-90	SHL		Added HprFontLo and HprFontHi labels to allow
+*				patching of FontBase
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+* 18 Apr 89	SHL		Fixed a bug in Omi's bug-fix to MATHC usage
+* 31-Mar-89	Greg Omi	Fixed hardware bug with MATHC for signed math
+* 9-Feb-89	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+TextPtr		.DS	2
+TextWidth	.DS	1
+TextRemaining	.DS	1
+
+
+
+HandyPrint
+* This routine prints the text pointed to by sysptr into the buffer pointed
+* to by TextBuffer.  Expects TextBuffer to be a well-formed completely-literal
+* sprite data buffer (you can create one using the INITLIT macro).
+* HandyPrint currently always fills to the end of the buffer with blanks.
+
+		;------	Get a copy of the text buffer pointer, and use the
+		;------	first value of the buffer (the sprite data's
+		;------	offset-to-next byte) as the buffer width value
+		LDA	TextPtr
+		STA	sysptr2
+		LDA	TextPtr+1
+		STA	sysptr2+1
+		LDA	(sysptr2)
+		STA	TextWidth
+		DEC
+		STA	TextRemaining	; Also, stash length for blank padding
+
+hprintLoop
+		;------	Calculate the address of this character's data
+		LDA	(sysptr)	; Get the next character
+		BNE	.10		; If non-null, use it!
+		STZ	MATHG		; else set up for shortcut math
+		LDX	TextRemaining	; Any room left in the buffer?
+		BNE	.18		; Branch if so to shortcut math
+		RTS
+
+.10		;------	We got a real character.  Set up to get its address
+		DEC		; Decrement to real offset
+		STA	MATHB	; Set up for math call
+		LDA	#FONT_HEIGHT
+		STA	MATHD
+		STZ	MATHC	; Clear in case of signed math
+		STZ	MATHA	; MULTIPLY
+
+		;------	Bump the text pointer to next character
+		INC	sysptr
+		BNE	.14
+		INC	sysptr+1
+.14
+		;------	Wait 'til the multiply is done (should be no wait)
+		WAITMATH
+		LDA	MATHH	; And get the low byte of the offset
+
+		;------	Use low byte of offset added to FontBase to
+		;------	create address of character data
+.18		CLC
+HprFontLo	.EQ *+1
+		ADC	#<FontBase
+		STA	sysptr3
+		LDA	MATHG
+HprFontHi	.EQ *+1
+		ADC	#>FontBase
+		STA	sysptr3+1
+
+		;------	Increment the TextPtr to next byte of output buffer
+		INC	TextPtr
+		BNE	.20
+		INC	TextPtr+1
+.20
+
+		;------	Grab a work copy of the TextPtr
+		LDA	TextPtr
+		STA	sysptr2
+		LDA	TextPtr+1
+		STA	sysptr2+1
+
+		;------	Set up for character data looping
+		LDY	#FONT_HEIGHT-1
+
+hprintCharLoop
+		;------	Copy this character's data into the output buffer
+		LDA	(sysptr3),Y
+		STA	(sysptr2)
+		LDA	sysptr2
+		CLC
+		ADC	TextWidth
+		STA	sysptr2
+		LDA	sysptr2+1
+		ADC	#0
+		STA	sysptr2+1
+		DEY
+		BPL	hprintCharLoop
+
+		;------	Decrement number of available positions
+		DEC	TextRemaining
+		JMP	hprintLoop
+
+
+

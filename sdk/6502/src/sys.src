@@ -1,0 +1,110 @@
+; Tue Sep 18 17:43:25 1990
+* === sys.src ===============================================================
+*
+* General System Source Code  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 28-Mar-90	SHL		IRQ handler quick checks for serial IRQ only
+*				if SERIALPORT_USER defined now.
+* 22-Mar-90	SHL		IRQ handler only touches 1 IRQ at a time now
+*				Individual handlers need not preserve X and A
+*				IRQ handlers now required to PLX PLA RTI
+*				instead of RTS
+*				Renamed SafeIntRts to IntReturn, which now
+*				does PLX PLA RTI
+* 16-Mar-90	SHL		Modified BRK detect for 1 cycle improvement
+*				in the case of IRQ
+* 15-Mar-90	SHL		Provided faster vector to Redeye interrupt
+*				Serial interrupts now must PLX PLA RTI to
+*				exit.
+* 14-Mar-90	SHL		Added SafeIntRts
+*				INITINT now vectors all IRQS to SafeIntRts
+*				instead of user supplied RTS
+* 26-Feb-90	SHL		Minor code tightening
+* 9-Feb-90	SHL		INITINT is now required before any use of
+*				INITEOF, INITEOL or SET_DISPLAY... macros
+*				This file can now be included before user
+*				calls INITINT
+* 7-Feb-90	SHL		Modified BRK_USER to force Howard Break
+* 31 May 89	-RJ		Added BRK_USER support code to UserIntHandler
+*				Removed InitSys routine
+* 6 Apr 89	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+* This code is called whenever a non-NMI interrupt occurs (either a hardware
+* interrupt or execution of a software BRK).
+
+UserIntHandler
+		PHA
+		PHX
+
+	  #IFDEF BRK_USER
+	  ;-- Check if we got here because of a BRK instruction and JMP to
+	  ;-- the BRK routine if so, else branch to the interrupt dispatcher
+		TSX
+		INX
+		INX
+		INX
+		LDA $0100,X		; Get a copy of the status byte
+		bit #$10		; Check break bit
+		BNE brkInt		; and branch if clear (hardware int)
+	  #ENDIF ; of #IFDEF BRK_USER
+
+hardInt
+		;------	We had a hardware interrupt.
+		;------	Get the interrupt flags value, reset the bits
+		LDA INTSET		; This gets the bits
+
+	  #IFDEF SERIALPORT_USER
+		bit #SERIAL_INT		; quick check for serial interrupt
+		beq .02
+		jmp (sysIntTable+{4*2})	; skip to serial IRQ now!
+	  #ENDIF
+
+.02		STA INTSET_RAM
+
+		;------	For least set bit in the interrupt value,
+		;------	vector to the routine
+		LDX #0
+		lda #1
+.00		  bit INTSET_RAM
+		  bne jumpIntTable
+		  INX
+		  INX
+		  asl a
+		 bne .00
+IntReturn
+		;------	At end of interrupt processing, restore the
+		;------	registers and return from interrupt
+
+		PLX
+		PLA
+		RTI
+
+
+
+
+* The above interrupt dispatcher does a JSR to this line of code.
+* This code jumps to the particular handler.  The interrupt dispatcher
+* should end with an RTS, which will return control to the above code.
+
+jumpIntTable
+		sta INTRST	; clear interrupt we're processing
+		JMP	(sysIntTable,X)
+
+
+	  #IFDEF BRK_USER
+brkInt
+		PLX
+		PLA
+BRK_vector	HBRK			; force BRK on Howard board
+		JMP BRK_vector		; Will be modified by INITINT call
+	  #ENDIF ; of #IFDEF BRK_USER
+
+

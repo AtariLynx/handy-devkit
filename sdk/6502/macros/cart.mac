@@ -1,0 +1,290 @@
+; Thursday 28-Jun-90 14:29:38
+* == cart.mac ==============================================================
+* 
+* Game Cartridge I/O Macros  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+* 
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 22-Jun-90	SHL		Added READRAMCART and WRITERAMCART macros
+* 20-Jun-90	SHL		Added RAMCART_USER support
+* 11-Apr-90	SHL		Removed the SETCARTOFFSET macro
+*				Registers for OPENFILE and SETCARTADDR
+*				arguments changed: A = cartridge page,
+*				X,Y = cartridge address
+*				SETCARTPAGE now takes argument in A reg
+*				GETDIR and GETDIRFAST macros are now identical
+* 26-Feb-90	SHL		Removed all references to WRITECART_USER
+*				Minor code tightening
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+* 30 May 89	-RJ		Added IODAT_RAM mask
+* 20 Apr 89	=RJ Mical=	Created this file!
+* 
+* ===========================================================================
+
+
+
+* The GETDIR macro accepts as an argument a file number in A and sets up 
+* the A, X and Y registers with the cartridge address of the file's 
+* directory entry.  The call to GETDIR sets up the registers as needed 
+* for a call to the OPENFILE command
+* 
+* ON ENTRY:
+*     A = File number for which the cartridge address should be calculated
+
+	#MACRO GETDIR
+		JSR GetDirAddress
+	#ENDMACRO
+
+	#MACRO GETDIRFAST
+		JSR GetDirAddress
+	#ENDMACRO
+
+
+
+
+* The OPENFILE macro expects the A, X and Y registers to have the cartridge 
+* address of a file's directory entry, where A has the page number and 
+* X,Y (low,high) has the offset.  After this call is made, the CartDirectory 
+* data structure contains a copy of the file's directory entry, and the 
+* cartridge hardware is set up to allow a read or write to the first data 
+* byte of the file.  
+* 
+* Note that the register settings required by this macro are the same as the 
+* ones returned by the GETDIR macro.  
+* 
+* ON ENTRY:
+*     X = Cartridge page number of the file's directory entry
+*     A = Low byte of page offset of the file's directory entry
+*     Y = High byte of page offset of the file's directory entry
+
+  #IFNDEF ROM_NODIR
+
+	#MACRO OPENFILE
+		JSR	OpenFile0
+	#ENDMACRO
+
+  #ENDIF
+
+
+
+* The READFILE macro reads the file's data into RAM.  
+* Which arguments should be passed to the READFILE macro is dependent on 
+* the type of file directory you have declared.  
+* 
+* If your directory has a ROMDIR_DEST field which defines a default RAM 
+* destination for the file's data then it's your choice:  you can have the 
+* data loaded to its regular RAM destination or to an alternate destination.  
+* You define which you want by setting A to zero or non-zero.  Set A zero to 
+* specify that you want the default RAM destination to be used.  Set A 
+* non-zero to specify that X,Y (low,high) contain the desired RAM destination
+* for the data.  
+* 
+* If ROMDIR_DEST isn't part of your directory entry, then you must always 
+* specify in X,Y (low,high) a RAM destination for the file's data.  
+* 
+* ON ENTRY:
+*     - For the entry arguments, see the above description
+
+  #IFNDEF ROM_NODIR
+
+	#MACRO READFILE
+		JSR	ReadFile0
+	#ENDMACRO
+
+  #ENDIF
+
+
+
+* The SETCARTADDR macro sets up the system pointers used to access the game
+* cartridge, and then sets the cartridge hardware to the desired address
+* 
+* ON ENTRY:
+*     A = Cartridge page
+*     X = Low byte of page offset
+*     Y = High byte of page offset
+*
+* On exit A, X and Y are trashed and the cartridge power is disabled
+* CartOffsetLow, CartOffsetHigh and CartPage are set to current cart address
+
+	#MACRO SETCARTADDR
+		JSR	SetCartAddress
+	#ENDMACRO
+
+
+
+* The SETCARTPAGE macro sets the cartridge hardware to the first byte of the
+* page specified in A.
+* 
+* ON ENTRY:
+*     A = Cartridge page
+*
+* On exit A, X and Y are trashed and cart power is enabled
+* CartPage is set to the current cartridge page
+* Note: CartOffsetLow and CartOffsetHigh are not affected
+
+	#MACRO SETCARTPAGE
+		sta CartPage
+		JSR SetCartPage
+	#ENDMACRO
+
+
+* The SET_TO_READ_CART macro turns on the cartridge power and sets the R/W
+* line to read
+* The A register is trashed
+	#MACRO SET_TO_READ_CART
+		LDA	IODAT_RAM
+		AND	#~CART_POWER_OFF ; Make sure cart power is on
+	  #IFDEF RAMCART_USER
+	  	ora #READ_ENABLE
+	  #ENDIF
+		STA	IODAT_RAM
+		STA	IODAT
+	#ENDMACRO
+
+
+* The SET_TO_WRITE_CART macro turns on the cartridge power and sets the R/W
+* line to write
+* The A register is trashed
+  #IFDEF RAMCART_USER
+	#MACRO SET_TO_WRITE_CART
+		lda IODAT_RAM
+		and #~{CART_POWER_OFF+READ_ENABLE}
+		sta IODAT_RAM
+		sta IODAT
+	#ENDM
+  #ENDIF
+
+
+* The RESTORE_CART macro turns off the cartridge power and sets the R/W line
+* to read
+* The A register is trashed
+	#MACRO RESTORE_CART
+		LDA IODAT_RAM
+	  #IFDEF RAMCART_USER
+		ora #CART_POWER_OFF+READ_ENABLE	; Turn off cartridge power
+	  #ELSE
+		ORA #CART_POWER_OFF	; Turn off cartridge power
+	  #ENDIF
+		STA IODAT_RAM
+		STA IODAT
+	#ENDMACRO
+
+
+
+* The READCART macro is used to read in bytes from the cartridge
+* ON ENTRY:
+*    -	CartIOCount must be initialized to number of bytes to be read with
+*	each byte incremented once (for instance: to read $0123 bytes set
+*	CartIOCount to $0224, to read $04ff bytes set CartIOCount to $0500)
+*    -	sysptr points to buffer for incoming data
+*    -	CartOffsetLow,High and CartPage to have valid numbers
+* 
+* ON EXIT:
+*    -	CartPage and CartOffsetLow,High are advanced to the byte beyond 
+*	the last byte read
+*    -	X,Y (low,high) has RAM address of the byte beyond the last written
+*    -  sysptr also has RAM address of the byte beyond the last written
+*    -	The A register is trashed
+
+	#MACRO READCART
+		JSR	ReadCart
+	#ENDMACRO
+
+
+ #IFDEF RAMCART_USER
+
+* The READRAMCART macro is used to read in one or more pages from 8K of
+* battery backed up RAM
+*
+* Regardless of the ROM size, the RAM is organized as 32 pages of 256 bytes
+* each
+*
+* On entry:
+*	X,Y = (low,high) Address in memory to read data into
+*	A   = number of pages to be read in
+* NOTE: Before calling READRAMCART, the SETCARTPAGE macro should be used to
+*  set the hardware to the page to start reading from
+*
+* On exit:
+*	A,X,Y are trashed
+*	Cart power is disabled
+*	The cartridge is NOT set up for subsequent reads or writes
+*
+* NOTE: This macro generates a significant amount of code, and if used several
+*  times, a subroutine that calls this macro should be considered
+
+  #MACRO READRAMCART
+	sta sysptr2
+	stx sysptr
+	sty sysptr+1
+	SET_TO_READ_CART
+??.0 .EQ *	
+	  ldy #0
+??.1 .EQ *
+	    lda RCART_1
+	    sta (sysptr),y
+	    iny
+	   bne ??.1
+	  dec sysptr2
+	  beq ??.2
+	  inc sysptr+1
+	  lda CartPage
+	  inc a
+	  SETCARTPAGE
+	 bra ??.0
+
+??.2 .EQ *
+	RESTORE_CART
+  #ENDM
+
+
+* The WRITERAMCART macro is used to write one or more pages to 8K of
+* battery backed up RAM
+*
+* Regardless of the ROM size, the RAM is organized as 32 pages of 256 bytes
+* each
+*
+* On entry:
+*	X,Y = (low,high) Address in memory of data to write to cartridge
+*	A   = number of pages to be written
+* NOTE: Before calling WRITERAMCART, the SETCARTPAGE macro should be used to
+*  set the hardware to the page to start writing to
+*
+* On exit:
+*	A,X,Y are trashed
+*	Cart power is disabled
+*	The cartridge is NOT set up for subsequent reads or writes
+*
+* NOTE: This macro generates a significant amount of code, and if used several
+*  times, a subroutine that calls this macro should be considered
+
+  #MACRO WRITERAMCART
+	sta sysptr2
+	stx sysptr
+	sty sysptr+1
+	SET_TO_WRITE_CART
+??.0 .EQ *
+	  ldy #0
+??.1 .EQ *
+	    lda (sysptr),y
+	    sta RCART_1
+	    iny
+	   bne ??.1
+	  dec sysptr2
+	  beq ??.2
+	  inc sysptr+1
+	  lda CartPage
+	  inc a
+	  SETCARTPAGE
+	 bra ??.0
+
+??.2 .EQ *
+	RESTORE_CART
+  #ENDM
+
+ #ENDIF	; #IFDEF RAMCART_USER
+
+

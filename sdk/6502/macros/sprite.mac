@@ -1,0 +1,174 @@
+; Tue Sep 18 16:53:24 1990
+* == sprite.mac ============================================================
+*
+* Sprite Rendering Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1988, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 18-Sep-90	SHL		Added code to work around RICOH bug
+*				and support for the NO_RICOH_PATCH switch
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+*				Shortened INITSUZY (removed unneeded STZs)
+*				Shortened WAITSUZY (removed NOPs)
+* 8 May 89	-RJ		Rewrote the SPRITES macro to use the features
+*				of the new assembler, added the RESPRITE macro
+* 6 Apr 89	-RJ		Moved SPRSYS init out of INITSUZY into INITSYS
+* 2 Feb 89	James Donald	Fix to WAITSUZY macro makes BCS branch back
+*				to the correct location
+* 26 Jan 89	-RJ		Incorporated Steve's WAITSUZY change, got
+*				rid of all references to Interruptus
+* 18 Jan 89	-RJ		INITSUZY nows initializes SPRSYS and
+*				SPRSYS_RAM to zero
+* 16 Jan 89	SHL		Modified WAITSUZY to wait until SUZY is done,
+*				instead of waiting for interrupts to not
+*				happen.
+* 30 Dec 88	-RJ		Changed errant #<?0 to #>?0 in SPRITES
+*				Non-HANDYIO SPRITES macro no longer sets a
+*				DISPLAY-request bit in X register
+*				Moved WAITSUZY above SPRITES
+* 26 Dec 88	-RJ		Added INITSUZY and WAITSUZY macros
+* 24 Dec 88	-RJ		Got rid of the PSPRITE macro.  Redefined
+*				SPRITES so that it doesn't automatically do
+*				a DISPLAY anymore.
+* Early 88	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+
+* The INITSUZY macro sets up Suzy to do sprites correctly.  If you're going
+* to render sprites (which you do with the SPRITES macro), you must use
+* the INITSUZY macro first
+		#MACRO	INITSUZY
+		LDA	#$F3
+		STA	SPRINIT
+		LDA	#$7F
+		STA	HSIZOFFL
+		STA	VSIZOFFL
+		LDA	#$01
+		STA	SUZYBUSEN
+		STZ	SDONEACK
+		#ENDMACRO
+
+
+
+* The WAITSUZY macro allows us to wait for Suzy to be finished.
+* 16-Jan-89 - SHL - modified to wait until SUZY is finished by asking her
+* politely if she is done yet.
+* NOTE:  this macro now presumes that the SPRITEWORKING bit of SPRSYS
+* is bit 0.
+
+	#IFDEF NO_RICOH_PATCH
+
+		#MACRO	WAITSUZY
+??1	.= *
+		STZ	CPUSLEEP
+		LDA	SPRSYS		; check to see if SUZY is done
+		LSR	A		; get bit 0 into carry
+		BCS	??1		; nope, let's wait some more
+		STZ	SDONEACK
+		#ENDMACRO
+
+	#ELSE
+
+		#MACRO	WAITSUZY
+??1	.= *
+		lda #SUZY_SPACE
+		tsb MAPCTL		; disable SUZY addresses
+		STZ	CPUSLEEP
+		trb MAPCTL		; reenable SUZY addresses
+		LDA	SPRSYS		; check to see if SUZY is done
+		LSR	A		; get bit 0 into carry
+		BCS	??1		; nope, let's wait some more
+		STZ	SDONEACK
+		#ENDMACRO
+
+	#ENDIF ;DEF NO_RICOH_PATCH
+
+
+
+* The SPRITES macro causes sprites to be rendered starting from the
+* sprite address arg.
+*
+* If you are going to render more than one sprite list when building a
+* display, you should use the SPRITES macro for the first list and
+* the RESPRITE macro for all following lists.
+*
+* Note that this macro does not cause the buffer to be displayed.  To get
+* the buffer displayed, you need to use a display macro such as DBUF_DISPLAY.
+*
+* The first arg is an address of either the first SCB you want rendered or
+* the address of a variable that contains the address of your first SCB.
+* The second arg to the SPRITES macro describes whether the first arg is
+* an absolute or indirect SCB address.
+* The second arg should be 0 or 1, standing for:
+*     0 = first arg is the address is the first SCB to be displayed
+*     1 = first arg is the addr of a variable pointing to addr of the first SCB
+		#MACRO	SPRITES
+		#IF	?1 <> 0
+		  LDA	?0
+		  STA	SCBNEXTL
+		  LDA	?0+1
+		  STA	SCBNEXTH
+		#ELSE
+		  LDA	#<?0
+		  STA	SCBNEXTL
+		  LDA	#>?0
+		  STA	SCBNEXTH
+		#ENDIF
+
+		LDA	RenderBuffer
+		STA	VIDBASL
+		LDA	RenderBuffer+1
+		STA	VIDBASH
+
+		STZ	SDONEACK
+
+		LDA	#$01
+		STA	SPRGO
+		WAITSUZY
+		#ENDMACRO
+
+
+
+* The RESPRITE macro causes sprites to be rendered starting from the
+* sprite address arg.  This macro should be used by those programmers who
+* want to render more than one sprite list when building the display.
+* This macro is identical to the SPRITES macro except that the sprite-engine
+* startup code isn't included.  You should call You should call the
+* RESPRITE macro only after a call to the SPRITES macro.
+*
+* Note that this macro does not cause the buffer to be displayed.  To get
+* the buffer displayed, you need to use a display macro such as DBUF_DISPLAY.
+*
+* The first arg is an address of either the first SCB you want rendered or
+* the address of a variable that contains the address of your first SCB.
+* The second arg to the SPRITES macro describes whether the first arg is
+* an absolute or indirect SCB address.
+* The second arg should be 0 or 1, standing for:
+*     0 = first arg is the address is the first SCB to be displayed
+*     1 = first arg is the addr of a variable pointing to addr of the first SCB
+		#MACRO	RESPRITE
+		#IF	?1 <> 0
+		  LDA	?0
+		  STA	SCBNEXTL
+		  LDA	?0+1
+		  STA	SCBNEXTH
+		#ELSE
+		  LDA	#<?0
+		  STA	SCBNEXTL
+		  LDA	#>?0
+		  STA	SCBNEXTH
+		#ENDIF
+
+		STZ	SDONEACK
+
+		LDA	#$01
+		STA	SPRGO
+		WAITSUZY
+		#ENDMACRO
+
+

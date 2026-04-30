@@ -1,0 +1,69 @@
+; Monday 30-Apr-90 17:26:10
+* === hsfx.mac ==============================================================
+*
+* HSFX (Handy Sound Effects) Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+* 13 May 89	-RJ		Added SEPARATE_HMUSIC_HSFX support
+* 11 Apr 89	-RJ		Added INITHSFX warning
+* 4-Jan-89	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+		#MACRO	INITHSFX
+		#IFDEF HANDYMUSIC
+		  #IFNDEF SEPARATE_HMUSIC_HSFX
+		    .ECHO	""
+		    .ECHO	"WARNING:  When using HMUSIC you should use"
+		    .ECHO	"          INITHMUSIC and you should not"
+		    .ECHO	"          use INITHSFX!"
+		  #ELSE
+		    JSR	InitHSFX
+		  #ENDIF
+		#ELSE
+		  JSR	InitHSFX
+		#ENDIF
+		#ENDMACRO
+
+
+		#MACRO	RESETHSFX
+		JSR	ResetHSFX
+		#ENDMACRO
+
+
+		#MACRO	PLAYHSFX
+		JSR	StartHSFX
+		#ENDMACRO
+
+
+
+* The SET_AUDIO_CLOCK sets the audio system's timer to run at the
+* specified rate.  Also, it causes the HMUSIC and HSFX drivers to be reset
+* to their initial state.
+* ON ENTRY:
+*     A has the audio timer preload value
+*     X has the audio clock frequency select mask
+
+	#MACRO SET_AUDIO_CLOCK
+	   phx
+	     pha
+	      #IFDEF HANDYMUSIC
+		INITHMUSIC
+	      #ELSE
+		INITHSFX
+	      #ENDIF
+	     pla
+	    sta TIMER0+{AUDIO_TIMER*4}+TIM_BACKUP
+	   pla
+	  ora #ENABLE_INT+ENABLE_RELOAD+ENABLE_COUNT
+	  sta TIMER0+{AUDIO_TIMER*4}+TIM_CONTROLA
+	#ENDMACRO
+
+
+

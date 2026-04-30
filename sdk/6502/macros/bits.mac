@@ -1,0 +1,32 @@
+; The RROL macro does a real 8-bit logical-rotate-left operation on the
+; accumulator.  This is distinct from the 6502's ROL instruction which
+; is a 9-bit operation, taking the low bit from the carry and then
+; rotating the high bit into the carry.  This macro first sets the
+; carry bit with the value of the accumulator's bit 7, then performs
+; a ROL operation
+	#MACRO RROL
+	CMP #$80
+	ROL
+	#ENDMACRO
+
+
+; The RROR macro does a real 8-bit logical-rotate-right operation on the
+; accumulator.  This is distinct from the 6502's ROR instruction which
+; is a 9-bit operation, taking the high bit from the carry and then
+; rotating the low bit into the carry.
+	#MACRO RROR
+	PHA
+	ROR
+	PLA
+	ROR
+	#ENDMACRO
+
+
+; The ASR macro performs an arithmetic-shift-right operation on the
+; accumulator
+	#MACRO ASR
+	CMP #$80
+	ROR
+	#ENDMACRO
+
+

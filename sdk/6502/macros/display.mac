@@ -1,0 +1,450 @@
+; Tuesday 27-Mar-90 10:58:38
+* === display.mac ===========================================================
+*
+* Display Macros  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1988,1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 27-Mar-90	SHL		Removed BufferAddrL, BufferAddrH
+* 20-Mar-90	SHL		SETDISP... macros no longer SEI/CLI and must
+*				be invoked when IRQs disabled
+*				Tightened up WAITEOF, WAITNEOF macros
+* 7-Mar-90	SHL		Removed the DISPLAY_ON and DISPLAY_OFF macros
+*				Moved initialization of DISPCTL_RAM to INITSYS
+*				in sys.mac
+* 27-Feb-90	SHL		Removed unnecessary STZs from HOFF8,VOFF8
+* 26-Feb-90	SHL		Minor code tightening
+* 9-Feb-90	SHL		Removed all references to HFIX1
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+*				General cleanup and prettification
+* 31 May 89	Larry Abel	Changed WAITEOF and WAITEOL to use TRB
+* 27 Apr 89	RG Goudy	Changed SETDISP_50 PCOUNT to $31
+* 19 Apr 89	-RJ		DISPCTL bit definitions now used
+* 6 Apr 89	-RJ		Added SETDISP_75
+* 19 Mar 89	-RJ		Added HFIX1 macros to SETDISP
+* 16 Mar 89	-RJ		Changed the DISPLAY macro to remove the #IF
+*				forward reference to DisplayBuffer forbidden
+*				by the new assembler
+* 13 Feb 89	-RJ		Added JSR InitDisplayer to SETDISP when
+*				EOF_USER isn't defined.  Also, removed the
+*				invocation of DISPLAY from DBUF_DISPLAY.
+*				DISPLAY now happens during EOF processing.
+*				Because of this, the EOF interrupt is now
+*				always turned on even if not EOF_USER.
+*				DBUF_DISPLAY now writes RenderBuffer to
+*				DisplayBuffer.  DISPLAY now reads from there.
+* 26 Jan 89	-RJ		Deleted SETDISP_30/25/20/15/10 macros
+* 16 Jan 89	SHL		Modified SETDISP macro to only enable those
+*				interrupts needed according to the EOF_USER
+*				and EOL_USER flags
+* 5 Jan 89	-RJ		Set interrupt disable before writing the
+*				display hardware addresses.
+*				Removed writing of DISPCTL from FLIP macro.
+*				Added writing of DISPCTL to DISPLAY macro.
+* 30 Dec 88	-RJ		Moved DISPLAY macro to top of DBUF_DISPLAY, got
+*				rid of redundant assignment there
+* 28 Dec 88	-RJ		Changed SETCOLL to store to COLLBASL,H
+* 27 Dec 88	-RJ		Added DISPLAY, DISP_AX, DISP_AY,
+*				SETDISP_20/15/10
+* 24-Dec-88	-RJ		Renamed DISPLAY to DBUF_DISPLAY.  Changed all
+*				ptr references to sysptr
+* 23-Dec-88	-RJ		Modified the DISPLAY macro to support HANDYIO.
+*				Added RGB16_I macro.
+* 22-Dec-88	-RJ		Added many display macros:  SETDISP_60/50/30/25,
+*				SETDISP, SETDBUF, SETCOLL, DISPLAY_ON,
+*				DISPLAY_OFF, INITEOF, WAITEOF, and FLIP.
+* Early 88	=RJ Mical=	Created this file!
+*
+* ===========================================================================
+
+
+
+* The SETDISP macro sets up the horizontal and vertical display timers
+* (thereby defining the frame rate) and sets the magic 'P' number.  Also
+* initializes the DISPCTL_RAM shadow mask of the hardware's DISPCTL value
+* The macro expects 5 arguments:
+*     - the backup value for the horizontal timer
+*     - the control bits for the horiz timer
+*     - the backup value for the vertical timer
+*     - the control bits for the vertical timer
+*     - the magic 'P' value
+		#MACRO	SETDISP
+
+		LDA	#?0
+		STA	HCOUNT+TIM_BACKUP
+	#IFDEF EOL_USER
+		lda #?1|%10000000
+	#ELSE
+		lda #?1&%01111111
+	#ENDIF
+		STA	HCOUNT+TIM_CONTROLA
+		LDA	#?2
+		STA	VCOUNT+TIM_BACKUP
+		lda #?3|%10000000
+		STA	VCOUNT+TIM_CONTROLA
+
+		LDA	#?4
+		STA	PBKUP
+	#IFNDEF	EOF_USER
+		JSR	InitDisplayer
+	#ENDIF
+		#ENDMACRO
+
+
+
+* These macros allow you to easily set up a 'standard' display
+		#MACRO SETDISP_75
+		SETDISP	$7E,$98,$68,$9F,$20
+		#ENDMACRO
+
+		#MACRO SETDISP_60
+		SETDISP	$9E,$98,$68,$9F,$29
+		#ENDMACRO
+
+		#MACRO SETDISP_50
+		SETDISP	$BD,$98,$68,$9F,$31
+		#ENDMACRO
+
+
+
+* The SETDBUF macro sets up the systems awareness of the two buffers you want
+* to use for the display.  The macro wants two arguments, the addresses of
+* the two buffers you will be using for your displays.  After you set up
+* the two buffers by calling this macro, DBUF_DISPLAY will be able to
+* do all the double-buffer display work for you automatically.
+* At any time after calling this routine, the address of the current
+* off-display buffer can be found in the variable RenderBuffer.
+		#MACRO	SETDBUF
+		LDA	#<?0
+		STA	RenderBuffer
+		LDA	#>?0
+		STA	RenderBuffer+1
+		LDA	#<?1
+		STA	DisplayBuffer
+		LDA	#>?1
+		STA	DisplayBuffer+1
+		STZ	DisplayFlags
+		#ENDMACRO
+
+
+* The SETCOLL macro sets up the hardware and system software to do
+* hardware collisions for you.  The macro expects two 16-bit arguments:
+* the address of your 8K collision buffer, and the offset from the first
+* byte of your SCB to the SCB's collision depository byte
+		#MACRO	SETCOLL
+		LDA	#<?0
+		STA	COLLBASL
+		LDA	#>?0
+		STA	COLLBASH
+		LDA	#<?1
+		STA	COLLOFFL
+		LDA	#>?1
+		STA	COLLOFFH
+		#ENDMACRO
+
+
+
+* The INITEOF macro is used to initialize the end-of-frame handler.
+* You should invoke this macro only once, any time before your first usage
+* of WAITEOF.
+	#IFDEF	EOF_USER
+		#MACRO	INITEOF
+		JSR	InitEOF
+		#ENDMACRO
+	#ENDIF
+
+
+* The INITEOL macro is used to initialize the end-of-line handler.
+* You should invoke this macro only once, any time before your first usage
+* of WAITEOL.
+	#IFDEF	EOL_USER
+		#MACRO	INITEOL
+		JSR	InitEOL
+		#ENDMACRO
+	#ENDIF
+
+
+* The WAITEOF macro allows the programmer to wait until the display
+* hardware has just finished displaying the end-of-frame display line.
+* There's a short while (about 3 display lines of time) before the
+* hardware starts working on the first line of the new display, so
+* after end-of-frame it's safe to do stuff like change the color
+* palette and things like that there
+*??? Note that this macro currently provides only a close approximation of
+*??? EOF timing.  The EOF interrupt handler needs a bit of fine-tuning to
+*??? get timing just right
+		#MACRO	WAITEOF
+		LDA	#DISPLAY_EOFFLAG
+		TRB	DisplayFlags
+systemp		.=	*
+		BIT	DisplayFlags
+		BEQ	systemp
+		#ENDMACRO
+
+* The WAITNEOF macro waits until at least one EOF interrupt has occured since
+* the last time the DISPLAY_EOFFLAG bit was reset
+
+		#MACRO	WAITNEOF
+systemp		.=	*
+		bit	DisplayFlags
+		BPL	systemp		; assumes DISPLAY_EOFFLAG = $80
+		#ENDMACRO
+
+
+
+* The WAITEOL macro allows the programmer to wait until the display
+* hardware has just finished displaying the end-of-line display pixel.
+* There's a short while (many pixels of time) before the
+* hardware starts working on the first pixel of the next display line, so
+* after end-of-line it's safe to do stuff like change the color
+* palette and things like that there
+*??? Note that this macro currently provides only a close approximation of
+*??? EOL timing.  The EOL interrupt handler needs a bit of fine-tuning to
+*??? get the timing just right
+		#MACRO	WAITEOL
+
+		LDA	#DISPLAY_EOLFLAG
+		TRB	DisplayFlags
+systemp		.=	*
+		BIT	DisplayFlags
+		BEQ	systemp
+		#ENDMACRO
+
+
+		#MACRO	WAITNEOL
+systemp		.=	*
+		BIT	DisplayFlags
+		BVC	systemp		; presumes that EOLFLAG equals $40
+		#ENDMACRO
+
+
+
+* The FLIP macro does everything you need to flip the display 180 degrees.
+* The current orientation of the display should be transparent to your
+* code unless you happen to be rendering directly into the display.  You
+* can check the DISPLAY_SWAPFLAG of the DisplayFlags variable to discover
+* whether or not the display is currently flipped.
+		#MACRO	FLIP
+		LDA	DISPCTL_RAM
+		EOR	#DISP_FLIP
+		STA	DISPCTL_RAM
+		LDA	SPRSYS_RAM
+		EOR	#LEFTHAND
+		STA	SPRSYS_RAM
+		STA	SPRSYS
+		#ENDMACRO
+
+
+
+* The DBUF_DISPLAY macro does the double-buffering swap of displays for you.
+* The macro causes the current offscreen buffer to be set up
+* as the buffer that will be displayed starting with the next top of frame.
+* Also, it sets things up such that the current display buffer will become
+* the new off-display rendering buffer that sprites will be rendered into
+* with subsequent calls to SPRITES.
+* Note that this macro doesn't swap the display buffers immediately, but
+* rather it sets things up for the buffers to be swapped in the future after
+* the display is finished displaying the current on-display buffer.
+* If you want to wait until just after the buffers are actually swapped,
+* then you should use the WAITEOF macro immediately after DBUF_DISPLAY.
+		#MACRO	DBUF_DISPLAY
+;!!! DISPLAY used to be called here in the DBUF macro.  Now DISPLAY is
+;!!! called during the end-of-frame handling
+;!!!		DISPLAY
+
+		PHP
+		SEI
+
+
+		;------	While still protected by the SEI,
+		;------	copy RenderBuffer to DisplayBuffer
+		LDA	RenderBuffer
+		ldx	DisplayBuffer
+		STA	DisplayBuffer
+		stx	RenderBuffer
+		LDA	RenderBuffer+1
+		ldx	DisplayBuffer+1
+		STA	DisplayBuffer+1
+		stx	RenderBuffer+1
+
+		PLP
+
+		#ENDMACRO
+
+
+
+* The DISPLAY macro, after flipping DisplayBuffer as appropriate to the
+* state of FLIP, tells Handy hardware that DisplayBuffer is the buffer
+* to be displayed
+		#MACRO	DISPLAY
+		LDA	DISPCTL_RAM
+		STA	DISPCTL
+		AND	#DISP_FLIP
+		BEQ	??
+		LDA	DisplayBuffer
+		CLC
+		ADC	#<DISPLAY_BUFSIZE-1
+		TAX
+		LDA	DisplayBuffer+1
+		ADC	#>DISPLAY_BUFSIZE-1
+		BRA	??2
+??
+		LDX	DisplayBuffer
+		LDA	DisplayBuffer+1
+??2
+		DISP_AX
+		#ENDMACRO
+
+
+* The DISP_AX and DISP_AY macros set up the address contained in
+* A (high-byte) and X or Y (low byte) as the next buffer to be displayed
+* after the next end-of-frame
+		#MACRO	DISP_AX
+		PHP
+		SEI
+		STX	DISPADRL
+		STA	DISPADRH
+		PLP
+		#ENDMACRO
+
+		#MACRO	DISP_AY
+		PHP
+		SEI
+		STY	DISPADRL
+		STA	DISPADRH
+		PLP
+		#ENDMACRO
+
+
+
+* The RGB_AXY macro presumes that you have Red, Green and Blue values in
+* registers A, X and Y respectively, and that you want the colors written
+* to the color pen specified by the macro argument where you supply the
+* address of the GREEN register for the pen you want to set.
+* Example setting pen 4 to yellow:
+*     LDA     #$0F
+*     LDX     #$0F
+*     LDY     #$00
+*     RGB_AXY GREEN4
+		#MACRO	RGB_AXY
+		STX	?0
+		STA	sysptr
+		TYA
+		ASL
+		ASL
+		ASL
+		ASL
+		ORA	sysptr
+		STA	?0+16
+		#ENDMACRO
+
+
+
+* The RGB16 macros let you set up all the color registers.
+* One way or another, you supply to the macro with the address of a buffer
+* that has an exact image of the sort of data that the hardware color
+* registers expect, which is to say a table of 16 bytes, each containing
+* in the lower nybble your 16 green values,
+* followed by a table of 16 bytes each with the upper nybble containing
+* blue and the lower nybble containing red.
+* The RGB16 macro expects an absolute address of the RGB table.
+* The RGB16_I macro expects the address of a variable that contains
+* the absolute address of the RGB table.
+* Note that this macro presumes that 16 Green registers are following
+* sequentially by 16 BlueRed registers.
+
+		#MACRO	RGB16
+		;------	Write the absolute address to sysptr
+		LDA	#<?0
+		STA	sysptr
+		LDA	#>?0
+		STA	sysptr+1
+		;------	copy the palette
+		LDY	#31
+		LDA	(sysptr),Y
+		STA	GREEN0,Y
+		DEY
+		BPL	*-6
+		#ENDMACRO
+
+		#MACRO	RGB16_I
+		LDA	?0
+		STA	sysptr
+		LDA	?0+1
+		STA	sysptr+1
+		;------	copy the palette
+		LDY	#31
+		LDA	(sysptr),Y
+		STA	GREEN0,Y
+		DEY
+		BPL	*-6
+		#ENDMACRO
+
+
+
+* The HOFF and VOFF macros set up the HOFF and VOFF for your next sprite
+* display list rendering.
+* HOFF8 and VOFF8 are used with 8-bit positioning where your offset value
+* is in A (the upper byte is set to zero for you)
+*
+* HOFF16 and VOFF16 are used with 16-bit positioning where the lower byte of
+* your offset value is in A, the upper byte is in Y
+		#MACRO	HOFF8
+		STA	HOFFL
+		#ENDMACRO
+
+		#MACRO	VOFF8
+		STA	VOFFL
+		#ENDMACRO
+
+		#MACRO	HOFF16
+		STA	HOFFL
+		STY	HOFFH
+		#ENDMACRO
+
+		#MACRO	VOFF16
+		STA	VOFFL
+		STY	VOFFH
+		#ENDMACRO
+
+
+
+* If AUTO_TIMEOUT_USER is defined, then add body to the TIMEOUT macro 
+	  #IFDEF AUTO_TIMEOUT_USER
+	    #MACRO TIMEOUT
+
+	    LDA SWITCHES
+	    AND #PAUSE_SWITCH
+	    ORA JOYSTICK
+	    BEQ ??3		; If no bits set, do nothing
+	    RESET_TIMEOUT
+
+??3	.= *
+	    INC TimeoutCount	 ;-- Has TimeoutCount counted to $8000 yet?
+	    BPL ??
+	    STZ TimeoutCount
+	    INC TimeoutCount+1
+	    BPL ??
+	    STZ TimeoutCount+1
+
+	    LDA IODAT	 	;-- TimeoutCount hit $8000.  Power plugged in?
+	    AND #EXTERNAL_POWER
+	    BEQ ??2	; No power cord, so go turn off the juice
+
+	    INC TimeoutCount+2	;-- Plugged in.  Let above count up many times
+	    LDA TimeoutCount+2
+	    CMP #13	; Lucky 13!
+	    BLT ??
+??2	.= *
+	    STZ SYSCTL1	; Time's up, turn power off
+??	.= *
+	    #ENDM
+	  #ELSE
+	    #MACRO TIMEOUT
+	    #ENDM
+	  #ENDIF
+
+

@@ -1,0 +1,96 @@
+; Tuesday 24-Apr-90 13:46:38
+* === hmusic.src ============================================================
+*
+* Handy Music Driver  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+* 
+* Date		Name		Description
+* ---------	--------------	----------------------------------------------
+* 24-Apr-90	SHL		ring0_flag and ring1_flag arrays replaced by
+*				ring_flag array
+* 18-Apr-90	SHL		HMUSIC_DEFAULT_PRIORITY added to give music
+*				a default priority level
+*				Added HMusicVarStart and HMusicVarEnd markers
+* 31-Aug-89	Stephen Jungels	Split this file from hsfx.src
+*
+* ===========================================================================
+
+
+; Variables used by the HMUSIC driver
+
+; If you are using HMUSIC you must include this file
+
+HMusicVarStart
+
+
+VoiceInUse	.DS HMUSIC_CHANNELCOUNT	; Flags whether this voice channel is in use
+
+instance	.DS 1			; Holds next 'instance' value
+VoiceInstance	.DS HMUSIC_CHANNELCOUNT	; Instances for current voices
+
+restore_ds	.DS HMUSIC_CHANNELCOUNT ; Flag for modified decay and/or sustain times
+save_decayl	.DS HMUSIC_CHANNELCOUNT ; Save location for decay time
+save_decayh	.DS HMUSIC_CHANNELCOUNT
+save_sustainl	.DS HMUSIC_CHANNELCOUNT ; Save location for sustain time
+save_sustainh	.DS HMUSIC_CHANNELCOUNT
+
+voice_freq_ptrl	.DS HMUSIC_CHANNELCOUNT ; Address of pitch table
+voice_freq_ptrh	.DS HMUSIC_CHANNELCOUNT
+voice_dur_ptrl	.DS HMUSIC_CHANNELCOUNT ; Address of duration table
+voice_dur_ptrh	.DS HMUSIC_CHANNELCOUNT
+
+gatel		.DS HMUSIC_CHANNELCOUNT	; Gate timing
+gateh		.DS HMUSIC_CHANNELCOUNT
+
+voicedata_ptrl	.DS HMUSIC_CHANNELCOUNT ; Current address of voice data
+voicedata_ptrh	.DS HMUSIC_CHANNELCOUNT
+
+frames_alivel	.DS HMUSIC_CHANNELCOUNT ; Number of audio frames this note 
+frames_aliveh	.DS HMUSIC_CHANNELCOUNT ; has been alive
+voice_endframel	.DS HMUSIC_CHANNELCOUNT ; When current note will end
+voice_endframeh	.DS HMUSIC_CHANNELCOUNT
+
+hmflagsl	.DS 1		; Last CFW read
+hmflagsh	.DS 1
+
+gating		.DS HMUSIC_CHANNELCOUNT ; Last AGD/AGS flag read
+
+new_note	.DS HMUSIC_CHANNELCOUNT ; Flag - send new note to HSFX
+
+SFX_to_cancel	.DS HMUSIC_CHANNELCOUNT ; Priority of SFX to cancel at note end
+
+did_outernext	.DS 1
+did_innernext	.DS 1
+did_ring_end	.DS 1	; One-shot prevention of recursive problems
+
+mloop_count0	.DS HMUSIC_CHANNELCOUNT
+mloop_adrl0	.DS HMUSIC_CHANNELCOUNT
+mloop_adrh0	.DS HMUSIC_CHANNELCOUNT
+mloop_count1	.DS HMUSIC_CHANNELCOUNT
+mloop_adrl1	.DS HMUSIC_CHANNELCOUNT
+mloop_adrh1	.DS HMUSIC_CHANNELCOUNT
+
+ring_flag	.DS HMUSIC_CHANNELCOUNT
+ring0_returnl	.DS HMUSIC_CHANNELCOUNT ; RING0 info
+ring0_returnh	.DS HMUSIC_CHANNELCOUNT
+ring1_returnl	.DS HMUSIC_CHANNELCOUNT ; RING1 info
+ring1_returnh	.DS HMUSIC_CHANNELCOUNT
+
+hmusic_base	.DS 2		; Address of music data
+
+VoiceHSFXChannel .DS HMUSIC_CHANNELCOUNT ; Hardware channels gotten by the voices
+
+
+	#IFDEF MUTE_USER
+Mute_flag	.DS 1
+	#ENDIF
+
+	#IFDEF	USERCALLS_USER
+MusicUserArgs	.DS HMUSIC_USERCOUNT	; Data passed from sound module
+USER_count	.DS 1			; Number of entries in USER_count
+	#ENDIF ; of #IFDEF USERCALLS_USER
+
+
+HMusicVarEnd

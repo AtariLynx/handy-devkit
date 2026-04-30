@@ -1,0 +1,102 @@
+; Thursday 19-Apr-90 16:17:32
+* === hsfx.var ==============================================================
+*
+* Handy Sound Effects Driver  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (C) 1989, Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	----------------------------------------------
+* 19-Apr-90	SHL		Moved top_of_loop0,1 variables from hsfx.src
+*				Moved hsfx_temp to zero page in hsfx.src
+* 18-Apr-90	SHL		Added HSFXVarStart and HSFXVarEnd markers
+* 31-Aug-89	Stephen Jungels	Split this file from hsfx.src
+*
+* ===========================================================================
+
+
+; Variables used by the HSFX driver
+
+; If you are using HSFX you must include this file
+
+
+HSFXVarStart
+
+
+audio_interruptus .ds 1	; Set on entry to audio interrupt code
+audio_lockout	.ds 1	; flag to lock out audio interrupts while busy
+audio_dropout	.ds 1	; count of audio frames that have been dropped
+
+top_of_loop0	.ds 1	; recursion flag
+top_of_loop1	.ds 1	; recursion flag
+
+
+* ChannelInUse is used to denote both that the HSFX channels are in use
+* and the priority of the effect currently playing on the channel
+* A ChannelInUse value of 0 (HSFX_FREECHANNEL) denotes channel not in use.
+* A value of $FF (HSFX_NOCHANNEL) denotes channel not available (grabbed).
+* Any other value is a channel-priority value, where sound effects get
+* odd priorities and music notes get even priorities.
+* Note that ChannelInUse has 5 elements, allowing for an additional
+* "mock channel" which is guaranteed to always have a priority of zero.
+* Channel 4 is returned by StartHSFX when the effect couldn't be started.
+
+ChannelInUse	.ds HSFX_CHANNELCOUNT+1
+
+
+* NOTE:  The above software depends on the exact order of the following
+* accumulators and interpolators.
+* Also, the software presumes that:  there are HSFX_ACCUMCOUNT number of
+* accumulators; there are a total of HSFX_REGCOUNT array pairs below;
+* and each pair is (HSFX_CHANNELCOUNT * HSFX_REGSIZE) large
+
+freql		.ds HSFX_CHANNELCOUNT
+freqh		.ds HSFX_CHANNELCOUNT
+shiftl		.ds HSFX_CHANNELCOUNT
+shifth		.ds HSFX_CHANNELCOUNT
+feedbackl	.ds HSFX_CHANNELCOUNT
+feedbackh	.ds HSFX_CHANNELCOUNT
+volumel		.ds HSFX_CHANNELCOUNT
+volumeh		.ds HSFX_CHANNELCOUNT
+freq_interpl	.ds HSFX_CHANNELCOUNT
+freq_interph	.ds HSFX_CHANNELCOUNT
+shift_interpl	.ds HSFX_CHANNELCOUNT
+shift_interph	.ds HSFX_CHANNELCOUNT
+feed_interpl	.ds HSFX_CHANNELCOUNT
+feed_interph	.ds HSFX_CHANNELCOUNT
+vol_interpl	.ds HSFX_CHANNELCOUNT
+vol_interph	.ds HSFX_CHANNELCOUNT
+
+flagsl		.ds HSFX_CHANNELCOUNT	;16 bit flags
+flagsh		.ds HSFX_CHANNELCOUNT
+
+next_keyframel	.ds HSFX_CHANNELCOUNT	;next 'change of data' frame
+next_keyframeh	.ds HSFX_CHANNELCOUNT
+
+current_framel	.ds HSFX_CHANNELCOUNT	;current frame being processed
+current_frameh	.ds HSFX_CHANNELCOUNT
+
+loop_count0	.ds HSFX_CHANNELCOUNT	;# loops to perform
+loop_adrl0	.ds HSFX_CHANNELCOUNT	;'top of loop' address
+loop_adrh0	.ds HSFX_CHANNELCOUNT
+
+loop_count1	.ds HSFX_CHANNELCOUNT	;# loops to perform
+loop_adrl1	.ds HSFX_CHANNELCOUNT	;'top of loop' address
+loop_adrh1	.ds HSFX_CHANNELCOUNT
+
+shift_flag	.ds HSFX_CHANNELCOUNT
+
+clock_temp	.ds HSFX_CHANNELCOUNT	;something wrong here!
+preload_temp	.ds HSFX_CHANNELCOUNT
+data_temp	.ds HSFX_CHANNELCOUNT
+shift_temp	.ds HSFX_CHANNELCOUNT
+integrate	.ds HSFX_CHANNELCOUNT
+
+hsfx_basel	.ds HSFX_CHANNELCOUNT	;pointers to data tables
+hsfx_baseh	.ds HSFX_CHANNELCOUNT
+
+launch_channel	.ds HSFX_CHANNELCOUNT	;for out of phase cancellation
+
+
+HSFXVarEnd

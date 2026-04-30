@@ -1,0 +1,35 @@
+
+* === controls.mac ==========================================================
+* 
+* Apple Joystick / Switches Input Macros  --  Handy Software
+* 
+* Confidential and Proprietary
+* Copyright (C) 1988, 1989, Epyx, Inc.
+* 
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 7-Feb-90	SHL		Removed Apple emulation compatibility
+*				Removed GETINPUT
+* 3 July 89	-RJ		The RESET_TIMEOUT logic is moved from the 
+*				input macros to the display TIMEOUT macro
+* 15 Jun 89	Carl Mey	Modified GETSWITCH to test PAUSE_SWITCH only
+* 24 May 89	-RJ		Added AUTO_TIMEOUT_USER support code
+*  2 Jan 89	-RJ		Added GETINPUT, which you must call before 
+*				GETJOY and/or GETSWITCH.
+* Mid 88	=RJ Mical=	Created this file!
+* 
+* ===========================================================================
+
+
+
+	#MACRO GETJOY
+	  LDA JOYSTICK
+	#ENDMACRO
+
+
+
+	#MACRO GETSWITCH
+	  LDA SWITCHES
+	#ENDMACRO
+
+

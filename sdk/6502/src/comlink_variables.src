@@ -1,0 +1,132 @@
+; Friday 23-Mar-90 11:51:53
+* === comlink_variables.src =================================================
+*
+* Intermediate level handler for Redeye  --  Handy Software
+*
+* Confidential and Proprietary
+* Copyright (c) 1989,1990 Epyx, Inc.
+*
+* Date		Name		Description
+* ---------	--------------	---------------------------------------------
+* 20-Mar-90	SHL		Variable length message support added
+*				PlayerData arrays moved outside range of
+*				variables that get initialized
+* 9-Mar-90	SHL		Added new Redeye variables
+* 6-Mar-90	SHL		Removed RG code support and variables
+* 28-Feb-90	SHL		Made compatible with Handy 1.1 release
+* 7-Sep-89	James Donald	Version finished for Cal Games
+*
+* ===========================================================================
+
+MASK_SIZE	.eq {MAX_PLAYERS+7}/8	; size of bit masks based on # players
+
+LOGON_MSG_SIZE	.eq 4+MASK_SIZE		; size of logon message
+
+ #IF PLAYER_DATA_SIZE+1>LOGON_MSG_SIZE
+MAX_DATA_SIZE	.eq PLAYER_DATA_SIZE+1	; size of largest message
+ #ELSE
+MAX_DATA_SIZE	.eq LOGON_MSG_SIZE	; size of largest message
+ #ENDIF
+
+* ===========================================================================
+
+
+start_of_comlink_variables
+
+* ===========================================================================
+
+* logon + normal communication variables
+
+XmitBuffer	.ds MAX_DATA_SIZE
+ActvPlrMask	.eq XmitBuffer+2
+LogonGameNumber	.eq ActvPlrMask+MASK_SIZE
+; XmitBuffer is where all outgoing data is placed before calling message
+; manager send routine
+; ActvPlrMask is a bit mask used during logon to verify that everyone thinks
+; the same players are logged in
+; LogonGameNumber is used during logon to verify all units want to play
+; the same game
+
+
+comlink_semaphore	.ds 1
+; comlink_semaphore prevents a high level interrupt from disturbing another
+; one in process
+
+
+* ===========================================================================
+
+ComlinkVarOverlay		; re-org address for overlayed variables
+
+* logon only variables
+
+PlayerHeard	.ds MAX_PLAYERS
+; PlayerHeard array has an entry for each player during logon, set to a high
+; number when that player is heard from, and counts down during every message
+; transaction - the player is assumed to have dropped out or changed number
+; if his entry reaches zero
+
+inconsistancy	.ds 1
+;This is set to 40 whenever the incoming mask disagrees with the local
+;mask and whenever we pack down. It is decremented every transmission
+;(We do not fiddle it on collisions because player 0 never experiences
+;a collision)
+;Logon can only terminate when this is zero and all the players have
+;been heard from recently
+
+
+logon_state	.ds 1
+; 0 means normal logon
+; 2 means too many players
+; 4 means terminating logon (master does this)
+; 6 finish logon for real when timer done
+; 8 means checking for redeye busy before logon
+
+timer_high_order_countdown .ds 1
+
+random_data	.ds 5	; The clocks are scrambled into this every message.
+random_data_size .eq *-random_data
+; Thus this value will be different every time in every lynx during logon
+
+index_into_random .ds 1
+
+
+LogonInProgress	.ds 1
+EndLogonRequest	.ds 1
+
+* ===========================================================================
+
+	.OR ComlinkVarOverlay	; re-origin over logon variables
+
+* After login redeye variables
+
+
+ #IFDEF VAR_SIZE_DATA
+PlayerDataSize0	.ds MAX_PLAYERS	; sizes of messages for even sequence data
+PlayerDataSize1	.ds MAX_PLAYERS	; sizes of messages for odd sequence data
+ #ENDIF
+
+PlayerFlag0	.ds MAX_PLAYERS	; message receipt flags for even sequence data
+PlayerFlag1	.ds MAX_PLAYERS	; message receipt flags for odd sequence data
+
+ #IFDEF VAR_SIZE_DATA
+OutGoingSize	.ds 1		; size of outgoing data
+ #ENDIF
+OutGoingFlag	.ds 1		; flag that we've sent our data
+OutGoingData	.ds PLAYER_DATA_SIZE	; next outgoing piece of data
+Sequence	.ds 1		; what sequence am I supposed to send next
+Seq		.ds 1		; outside IRQ, what sequence data am I using
+WhosNext	.ds 1		; who is supposed to send next
+WhosReTxReq	.ds 1		; who asked for resend? (0=no-one)
+ReTxSequence	.ds 1		; what sequence is requester on
+ReTxMask	.ds MASK_SIZE	; mask for players to re-transmit data for
+RxMask		.ds MASK_SIZE	; who have I not received data from
+LongTimeoutFlag	.ds 1		; flag for long timeout after send request
+
+end_of_comlink_erasable_variables
+
+PlayerData0	.ds {PLAYER_DATA_SIZE*MAX_PLAYERS}	; even sequence data
+PlayerData1	.ds {PLAYER_DATA_SIZE*MAX_PLAYERS}	; odd sequence data
+
+end_of_comlink_variables
+
+
