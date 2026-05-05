@@ -9,9 +9,9 @@
    10                   * ====================================================
    11                   
    12                   ; Compile for Pinky/Mandy with
-   13                   ;	asm cartgo.src +L
+   13                   ;	asm cartgo.src +L +S
    14                   ; Compile for Howard/Howdy with
-   15                   ;	asm cartgo.src +L +Ohowardcartgo.bin +DHOWARD
+   15                   ;	asm cartgo.src +L +S +Ohowardcartgo.bin +DHOWARD
    16                   
    17      019A         ROM_HEADER_SIZE		.EQ		$019a
    18      0000         LO					.EQ		0

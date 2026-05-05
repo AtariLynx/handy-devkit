@@ -68,7 +68,11 @@ In Howard and Pinky the typical types of RAM chips used are:
 - **Sony CXK58256PM-10L**
   32K words x 8 bit
   High speed CMOS static RAM
-  28 pin DIP package ()
+  28 pin DIP package
+
+Also found inside Howard boards
+- **Toshiba TC55257BPL-10** 
+  28 pin DIP package
 
 Given that 1, 2 or 4 chips can be selected, it is possible to configure game ROM sizes of 32, 64 and 128 KB using 32KB Fujitsu chips and sizes of 128, 256 or 512 KB using the 128 KB Mitsubishi chips.
 
