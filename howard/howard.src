@@ -121,9 +121,9 @@ Main	; $3029
 ; Restore all previous values and return from NMI handler
 .9		LDX Registers+S_OFFSET		; Restore stack pointer
 		TXS
-		LDA Registers+S_OFFSET+HI	; $0208
+		LDA Registers+PC_OFFSET+HI	; $0208
 		PHA
-		LDA Registers+S_OFFSET+LO	; $0207
+		LDA Registers+PC_OFFSET+LO	; $0207
 		PHA
 		LDA Registers+P_OFFSET		; $0209
 		PHA
@@ -535,9 +535,9 @@ ReadMemory
 		LDA sysptr2+HI
 		CMP #>SUZY_BASE		; Memory range below Suzy ($FC00) is safe
 		BNE .63
-		LDA sysptr2+LO 
+		LDA sysptr2+LO 		; Skip $FC00-$FC7F
 		BPL .64
-		CMP #$84			; Do nothing for $FC84 and below (Unallocated address in Suzy)
+		CMP #$84			; Do nothing for $FC00-$FC83 (FC84 and above are mostly unallocated address in Suzy)
 		BCC .64
 .63 	LDA (sysptr2+LO)
 .64 	RTS
