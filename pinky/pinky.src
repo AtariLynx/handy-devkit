@@ -30,7 +30,7 @@ runptr			.DS 2
 		.ORG BASE_ORG
 		.RUN *
 
-		LDX #LOAD_COUNT			; $66 bytes
+		LDX #LOAD_COUNT			; Will evaluate to $66 bytes
 .0		LDA NmiHandler-1,X		; Copy from $021C to $3000
 		STA NMI_ORG-1,X
 		DEX
@@ -85,7 +85,7 @@ ReceiveByte ; 3038 Get a byte from parallel port
 		LDA RCART_1				; Read data byte
 		RTS
 
-SetPage ; 304B Set cart page routine (preserves X)
+SetPage ; 304B Set cart page routine (preserves X and Y (untouched))
 		PHX
 		SEC
 		BRA .0

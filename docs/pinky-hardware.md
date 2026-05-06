@@ -129,7 +129,7 @@ It is not known how this is wired on the inside of Mandy, but presumably the blu
 
 ## Generic Array Logic chipset
 
-The Pinky board has a single GAL (Generic Array Logic) chip on the board. It is presumably used to define the logic of the interaction between the various components of the board and their inputs and outputs.
+The Pinky board has a single Generic Array Logic (GAL) chip on the board. It is presumably used to define the logic of the interaction between the various components of the board and their inputs and outputs.
 
 The GAL chip is a National Semiconductor GAL16V8-**25LNC**. The bold part is uncertain, as most of it is covered by stickers indicating `UP9` for the programmable part that is inserted into slot `U9` of the board. The GAL16V8-25LNC was also used in Commodore Amiga computers, e.g. the Amiga 1000 memory expansion module.
 

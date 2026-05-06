@@ -383,7 +383,7 @@ SuzyValues
 		.BYTE NO_COLLIDE+LEFTHAND
 		.BYTE $00			; No horizontal and vertical offset
 		.BYTE $00
-;		.BYTE $91
+;		.BYTE $91			; Overlaps with Suzy offsets to save two bytes
 ;		.BYTE $09
 
 ; 03B0

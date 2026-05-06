@@ -348,7 +348,7 @@ MikeyValues
 		.BYTE $0E			; Yellow
 		.BYTE $00			; Black
 		.BYTE $00			; Black	
-		.BYTE $18			; 2 microseconds timing for horizontal line
+		.BYTE ENABLE_RELOAD+ENABLE_COUNT+AUD_1	; 2 microseconds timing for horizontal line
 		.BYTE $9E			; 158 backup value for horizontal line scan (160 pixel across)
 
 MIKEYVALS_COUNT	.EQ *-MikeyValues	; number of values to INIT in loop

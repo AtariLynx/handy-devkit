@@ -270,7 +270,7 @@ ReadMemory
 		CMP #>SUZY_BASE		; Check if in Suzy space
 		BNE .40
 		LDA sysptr
-		CMP #$84			; Do nothing for $FC84 and below (Unallocated address in Suzy)
+		CMP #$84			; Skip read for $FC00-$FC83 (active Suzy registers); $FC84+ are safe to read
 		BCC .41
 .40		LDA (sysptr)		; Load value at address
 .41		RTS
